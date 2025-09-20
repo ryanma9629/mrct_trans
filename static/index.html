@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Technical Translation Tool</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Technical Translation Tool</h1>
+            <p>English ⇄ Chinese Translation with Technical Dictionary</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="llm-selection">
+                    <label for="llm-provider">Select LLM Provider:</label>
+                    <select id="llm-provider">
+                        <option value="chatgpt">ChatGPT</option>
+                        <option value="chatgpt(azure)">ChatGPT (Azure)</option>
+                        <option value="deepseek">DeepSeek</option>
+                        <option value="qwen">Qwen</option>
+                    </select>
+                </div>
+                
+                <div class="api-token">
+                    <label for="api-token">API Token:</label>
+                    <input type="password" id="api-token" placeholder="Enter your API token">
+                </div>
+                
+                <div class="dictionary-download">
+                    <h3>Technical Dictionary</h3>
+                    <p>QS-TB.csv contains technical terms for accurate translation</p>
+                    <a href="/download-dictionary" id="download-dict-btn" class="btn btn-secondary">
+                        📥 Download QS-TB.csv
+                    </a>
+                </div>
+            </div>
+            
+            <div class="translation-area">
+                <div class="input-section">
+                    <label for="input-text">Text to Translate:</label>
+                    <textarea id="input-text" placeholder="Enter text to translate..." rows="8"></textarea>
+                    <button id="translate-btn" class="btn btn-primary">Translate</button>
+                </div>
+                
+                <div class="output-section">
+                    <label for="output-text">Translation Result:</label>
+                    <div id="output-text" class="output-area"></div>
+                    <button id="copy-btn" class="btn btn-secondary">Copy to Clipboard</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="loading" class="loading hidden">
+            <div class="spinner"></div>
+            <p>Translating...</p>
+        </div>
+        
+        <div id="error-message" class="error-message hidden"></div>
+    </div>
+    
+    <script src="static/script.js"></script>
+</body>
+</html>
