@@ -1,25 +1,25 @@
 # MRCT BOOK Translator
 
-🌐 **A powerful web-based English ⇄ Chinese translation tool with technical dictionary support**
+**A powerful web-based English ⇄ Chinese translation tool with technical dictionary support**
 
 ![Language](https://img.shields.io/badge/Language-Python-blue)
 ![Framework](https://img.shields.io/badge/Framework-FastAPI-green)
 ![License](https://img.shields.io/badge/License-Educational-orange)
 ![Platform](https://img.shields.io/badge/Platform-Cross--Platform-lightgrey)
 
-## 🚀 Features
+## Features
 
-- **🔄 Bidirectional Translation**: Seamlessly translate between English and Chinese
-- **🤖 Multiple AI Providers**: Support for Qwen, DeepSeek, ChatGPT, and Azure OpenAI
-- **📚 Technical Dictionary**: Built-in QS-TB.csv dictionary with 2,700+ technical terms
-- **🎯 Smart Language Detection**: Automatically detects input language
-- **💡 Context-Aware Translation**: Uses dictionary terms for accurate technical translations
-- **🖥️ Modern Web Interface**: Clean, responsive design for easy use
-- **⚡ Real-time Translation**: Fast API responses with loading indicators
-- **📋 Copy to Clipboard**: One-click copying of translation results
-- **🔒 Privacy-First**: All processing runs locally on your machine
+- **Bidirectional Translation**: Seamlessly translate between English and Chinese
+- **Multiple AI Providers**: Support for Qwen, DeepSeek, ChatGPT, and Azure OpenAI
+- **Technical Dictionary**: Built-in QS-TB.csv dictionary with 2,700+ technical terms
+- **Smart Language Detection**: Automatically detects input language
+- **Context-Aware Translation**: Uses dictionary terms for accurate technical translations
+- **Modern Web Interface**: Clean, responsive design for easy use
+- **Real-time Translation**: Fast API responses with loading indicators
+- **Copy to Clipboard**: One-click copying of translation results
+- **Privacy-First**: All processing runs locally on your machine
 
-## 🛠️ Supported AI Providers
+## Supported AI Providers
 
 | Provider | Model | Strengths | Cost |
 |----------|-------|-----------|------|
@@ -28,7 +28,7 @@
 | **OpenAI ChatGPT** | gpt-4o-mini | Most reliable, high quality | Medium |
 | **Azure OpenAI** | gpt-4o-mini | Enterprise-grade reliability | Medium |
 
-## 📸 Screenshot
+## Screenshot
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -42,7 +42,7 @@
 │ ********        │ │                                     │ │
 │                 │ └─────────────────────────────────────┘ │
 │ Technical Dict. │                                         │
-│ 📥 Download CSV │ [Translate]                            │
+│ Download CSV    │ [Translate]                            │
 │                 │                                         │
 │                 │ Translation Result:                     │
 │                 │ ┌─────────────────────────────────────┐ │
@@ -53,7 +53,7 @@
 └─────────────────┴───────────────────────────────────────────┘
 ```
 
-## 🏃‍♂️ Quick Start
+## Quick Start
 
 ### Prerequisites
 - Python 3.8 or higher
@@ -102,7 +102,7 @@
    
    Navigate to `http://localhost:8099`
 
-## 🔧 Configuration
+## Configuration
 
 ### API Keys Setup
 
@@ -134,7 +134,7 @@ The included `QS-TB.csv` file contains over 2,700 technical terms for accurate t
 
 Download and customize the dictionary as needed for your specific domain.
 
-## 🎯 Usage
+## Usage
 
 ### Web Interface
 
@@ -194,7 +194,7 @@ translated_text, matches = await service.translate(
 config = service.get_config()
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 mrct_trans/
@@ -212,7 +212,7 @@ mrct_trans/
 └── API_KEY_Application_Guide.md # API key instructions
 ```
 
-## 🏗️ Architecture
+## Architecture
 
 The application follows a clean architecture pattern with separation of concerns:
 
@@ -224,15 +224,15 @@ The application follows a clean architecture pattern with separation of concerns
   - Language detection and text processing
 - **`static/`**: Frontend web interface for user interaction
 
-## 🛡️ Security & Privacy
+## Security & Privacy
 
-- ✅ **Local Processing**: All operations run on your machine
-- ✅ **No Data Collection**: No user data is stored or transmitted
-- ✅ **API Key Protection**: Keys stored locally in `.env` file
-- ✅ **Direct API Calls**: Translation requests go directly to chosen AI provider
-- ⚠️ **Keep Keys Secure**: Never commit `.env` file to version control
+- **Local Processing**: All operations run on your machine
+- **No Data Collection**: No user data is stored or transmitted
+- **API Key Protection**: Keys stored locally in `.env` file
+- **Direct API Calls**: Translation requests go directly to chosen AI provider
+- **Keep Keys Secure**: Never commit `.env` file to version control
 
-## 🚨 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -265,7 +265,7 @@ pip install -r requirements.txt
 2. Review [API_KEY_Application_Guide.md](API_KEY_Application_Guide.md) for API setup
 3. Open an issue on GitHub with error details and system info
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Areas for improvement:
 - Additional AI provider integrations
@@ -274,14 +274,14 @@ Contributions are welcome! Areas for improvement:
 - Translation quality optimizations
 - Docker containerization
 
-## 📊 Performance
+## Performance
 
 - **Translation Speed**: ~1-3 seconds depending on provider
 - **Dictionary Size**: 2,700+ technical terms
 - **Memory Usage**: ~50MB typical
 - **Supported Text Length**: Up to 4,000 tokens per request
 
-## 🛣️ Roadmap
+## Roadmap
 
 - [ ] Batch translation support
 - [ ] Translation history
@@ -290,11 +290,11 @@ Contributions are welcome! Areas for improvement:
 - [ ] Mobile-responsive improvements
 - [ ] Translation quality metrics
 
-## 📄 License
+## License
 
 This project is for educational and research purposes. Please check individual AI provider terms of service for commercial usage restrictions.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Technical dictionary sourced from QS-TB terminology database
 - Built with FastAPI and modern web technologies
@@ -302,6 +302,6 @@ This project is for educational and research purposes. Please check individual A
 
 ---
 
-**Made with ❤️ for accurate English ⇄ Chinese translation**
+**Made with care for accurate English ⇄ Chinese translation**
 
 *For technical support or questions, please refer to the documentation or open an issue.*

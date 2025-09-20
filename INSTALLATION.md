@@ -2,14 +2,14 @@
 
 A cross-platform web-based application for English ⇄ Chinese translation using multiple LLM providers with integrated technical dictionary support.
 
-## 📋 System Requirements
+## System Requirements
 
 - **Python**: 3.8 or higher
 - **Operating System**: Windows 10+, macOS 10.14+, or Linux (Ubuntu 18.04+, CentOS 7+)
 - **Memory**: 2GB RAM minimum
 - **Network**: Internet connection for AI API calls
 
-## 🚀 Installation Instructions
+## Installation Instructions
 
 ### Windows Installation
 
@@ -121,7 +121,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### 1. API Keys Setup
 
@@ -164,7 +164,7 @@ AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 
 See `API_KEY_Application_Guide.md` for detailed instructions on how to obtain API keys for each provider.
 
-## 🎯 Usage Instructions
+## Usage Instructions
 
 ### Starting the Application
 
@@ -204,7 +204,7 @@ The application will start on `http://localhost:8099`. Open your web browser and
 
 - **Terminal**: Press `Ctrl+C` in the terminal where the server is running
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 mrct_trans/
@@ -222,7 +222,7 @@ mrct_trans/
 └── API_KEY_Application_Guide.md # API key setup guide
 ```
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 The application uses a modular architecture:
 
@@ -232,7 +232,7 @@ The application uses a modular architecture:
   - `DictionaryMatcher`: Technical dictionary lookup and context preparation
 - **`static/`**: Frontend web interface for user interaction
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 ## Support
 
@@ -308,7 +308,7 @@ pip install python-multipart
    - **ChatGPT**: Most reliable but more expensive
 3. **Dictionary**: Keep `QS-TB.csv` updated with your technical terms
 
-## 🔒 Security & Privacy
+## Security & Privacy
 
 - All processing runs locally on your machine
 - Translation requests are only sent to your chosen AI provider
@@ -316,7 +316,7 @@ pip install python-multipart
 - No data is collected or sent to third parties
 - Ensure your `.env` file is not shared or committed to version control
 
-## 📝 Support
+## Support
 
 ### Getting Help
 
@@ -333,7 +333,7 @@ When reporting issues, please include:
 - Error messages from the launcher or terminal
 - API provider being used
 
-## 📄 License
+## License
 
 This project is for educational and research purposes. Please check individual AI provider terms of service for commercial usage restrictions.
 

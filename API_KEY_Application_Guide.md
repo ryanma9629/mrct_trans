@@ -2,7 +2,7 @@
 
 This document provides instructions on how to obtain API keys for Alibaba Qwen and DeepSeek for use with the MRCT BOOK Translator tool.
 
-## 🚀 Alibaba Qwen API Key Application
+## Alibaba Qwen API Key Application
 
 ### Step 1: Register Alibaba Cloud Account
 1. Visit Alibaba Cloud website: https://www.aliyun.com/
@@ -36,7 +36,7 @@ This document provides instructions on how to obtain API keys for Alibaba Qwen a
 
 ---
 
-## 🤖 DeepSeek API Key Application
+## DeepSeek API Key Application
 
 ### Step 1: Register DeepSeek Account
 1. Visit DeepSeek website: https://www.deepseek.com/
@@ -69,7 +69,7 @@ This document provides instructions on how to obtain API keys for Alibaba Qwen a
 
 ---
 
-## 💡 Configuration Recommendations
+## Configuration Recommendations
 
 ### Environment Variable Setup
 Create a `.env` file in the project root:
@@ -119,7 +119,7 @@ If you encounter these issues:
 
 ---
 
-## 📞 Technical Support
+## Technical Support
 
 ### Alibaba Qwen
 - Official Documentation: https://help.aliyun.com/zh/model-studio/
@@ -133,6 +133,6 @@ If you encounter these issues:
 
 ---
 
-## 🔄 Update Log
+## Update Log
 - 2025-01-20: Document created
 - Document Version: v1.0
