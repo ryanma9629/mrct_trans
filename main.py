@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -12,11 +12,9 @@ from pydantic import BaseModel
 
 from translator import TranslationService
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configuration
 DICTIONARY_FILE = "QS-TB.csv"
 STATIC_DIR = "static"
 DEFAULT_HOST = "localhost"
@@ -25,11 +23,8 @@ DEFAULT_PORT = 8099
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Handle application startup and shutdown events."""
-    # Startup
     logger.info("Starting MRCT BOOK Translator service...")
     
-    # Verify required files exist
     static_path = Path(STATIC_DIR)
     dict_path = Path(DICTIONARY_FILE)
     
@@ -43,13 +38,10 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # Shutdown
     logger.info("Shutting down MRCT BOOK Translator service...")
 
 
-# Pydantic Models
 class TranslationRequest(BaseModel):
-    """Request model for translation endpoint."""
     text: str
     llm_provider: str
     api_token: str
@@ -67,7 +59,6 @@ class TranslationRequest(BaseModel):
 
 
 class TranslationResponse(BaseModel):
-    """Response model for translation endpoint."""
     translated_text: str
     dictionary_matches: List[Tuple[str, str, int, int]]
     
@@ -81,14 +72,14 @@ class TranslationResponse(BaseModel):
 
 
 class ConfigResponse(BaseModel):
-    """Response model for configuration endpoint."""
     supported_providers: List[str]
+    default_models: Dict[str, str]
+    default_tokens: Dict[str, str]
     default_provider: str
     dictionary_file: str
     dictionary_loaded: bool
 
 
-# FastAPI App Configuration
 app = FastAPI(
     title="MRCT BOOK Translator",
     description="English ⇄ Chinese translation service with technical dictionary support",
@@ -98,13 +89,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add security middleware
 app.add_middleware(
     TrustedHostMiddleware, 
     allowed_hosts=["localhost", "127.0.0.1", "*.localhost"]
 )
 
-# Add CORS middleware for development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:8099", "http://127.0.0.1:8099"],
@@ -113,9 +102,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize translation service with error handling
 def create_translation_service() -> Optional[TranslationService]:
-    """Create and initialize the translation service."""
     try:
         service = TranslationService(DICTIONARY_FILE)
         logger.info("Translation service initialized successfully")
@@ -128,14 +115,8 @@ def create_translation_service() -> Optional[TranslationService]:
 translation_service = create_translation_service()
 
 
-# API Endpoints
 @app.post("/translate", response_model=TranslationResponse)
 async def translate_text(request: TranslationRequest):
-    """
-    Translate text using the specified LLM provider.
-    
-    Returns the translated text along with any dictionary matches found.
-    """
     if translation_service is None:
         raise HTTPException(
             status_code=503, 
@@ -162,11 +143,6 @@ async def translate_text(request: TranslationRequest):
 
 @app.get("/config", response_model=ConfigResponse)
 async def get_config():
-    """
-    Get the current service configuration and status.
-    
-    Returns information about supported providers and dictionary status.
-    """
     if translation_service is None:
         raise HTTPException(
             status_code=503, 
@@ -174,7 +150,31 @@ async def get_config():
         )
     
     try:
-        return translation_service.get_config()
+        # Get the basic config from the translation service
+        basic_config = translation_service.get_config()
+        
+        # Extract the configuration data with proper type casting
+        supported_providers = basic_config.get("supported_providers", [])
+        default_models = basic_config.get("default_models", {})
+        default_tokens = basic_config.get("default_tokens", {})
+        
+        # Ensure we have the right types
+        if not isinstance(supported_providers, list):
+            supported_providers = []
+        if not isinstance(default_models, dict):
+            default_models = {}
+        if not isinstance(default_tokens, dict):
+            default_tokens = {}
+        
+        # Add the missing fields required by ConfigResponse
+        return ConfigResponse(
+            supported_providers=supported_providers,
+            default_models=default_models,
+            default_tokens=default_tokens,
+            default_provider=supported_providers[0] if supported_providers else "chatgpt",
+            dictionary_file=DICTIONARY_FILE,
+            dictionary_loaded=Path(DICTIONARY_FILE).exists()
+        )
     except Exception as e:
         logger.error(f"Failed to get config: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get config: {str(e)}")
@@ -182,11 +182,6 @@ async def get_config():
 
 @app.get("/download-dictionary")
 async def download_dictionary():
-    """
-    Download the technical dictionary file.
-    
-    Returns the CSV file containing the dictionary data.
-    """
     dict_path = Path(DICTIONARY_FILE)
     
     if not dict_path.exists():
@@ -201,11 +196,6 @@ async def download_dictionary():
 
 @app.get("/")
 async def serve_index():
-    """
-    Serve the main application interface.
-    
-    Returns the HTML interface for the translation service.
-    """
     index_path = Path(STATIC_DIR) / "index.html"
     
     if not index_path.exists():
@@ -214,14 +204,8 @@ async def serve_index():
     return FileResponse(str(index_path))
 
 
-# Health check endpoint
 @app.get("/health")
 async def health_check():
-    """
-    Check the health status of the service.
-    
-    Returns the current service status and component availability.
-    """
     status = {
         "status": "healthy" if translation_service is not None else "degraded",
         "translation_service": translation_service is not None,
@@ -232,7 +216,6 @@ async def health_check():
     return status
 
 
-# Mount static files
 if Path(STATIC_DIR).exists():
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     logger.info(f"Static files mounted from {STATIC_DIR}")

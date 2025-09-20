@@ -12,13 +12,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 class SupportedProvider(Enum):
-    """Enumeration of supported LLM providers."""
     CHATGPT = "chatgpt"
     CHATGPT_AZURE = "chatgpt(azure)"
     DEEPSEEK = "deepseek"
@@ -27,7 +25,6 @@ class SupportedProvider(Enum):
 
 @dataclass
 class ProviderConfig:
-    """Configuration for LLM providers."""
     endpoint: str
     default_model: str
     max_tokens: int
@@ -35,17 +32,14 @@ class ProviderConfig:
 
 
 class TranslationError(Exception):
-    """Custom exception for translation-related errors."""
     pass
 
 
 class APIError(TranslationError):
-    """Exception for API-related errors."""
     pass
 
 
 class DictionaryMatcher:
-    """Handles technical dictionary matching for translation context."""
     
     def __init__(self, csv_file: Union[str, Path]):
         self.en_to_cn: Dict[str, str] = {}
@@ -53,7 +47,6 @@ class DictionaryMatcher:
         self._load_dictionary(csv_file)
     
     def _load_dictionary(self, csv_file: Union[str, Path]) -> None:
-        """Load dictionary from CSV file with error handling."""
         csv_path = Path(csv_file)
         
         if not csv_path.exists():
@@ -62,7 +55,7 @@ class DictionaryMatcher:
         try:
             with open(csv_path, 'r', encoding='utf-8-sig') as f:
                 reader = csv.reader(f)
-                next(reader)  # Skip header
+                next(reader)
                 
                 for row_num, row in enumerate(reader, start=2):
                     if len(row) >= 2 and row[0].strip() and row[1].strip():
@@ -70,7 +63,7 @@ class DictionaryMatcher:
                         cn_term = row[1].strip()
                         self.en_to_cn[en_term.lower()] = cn_term
                         self.cn_to_en[cn_term] = en_term
-                    elif len(row) >= 2:  # Log empty entries for debugging
+                    elif len(row) >= 2:
                         logger.debug(f"Skipping empty entry at row {row_num}: {row}")
                         
             logger.info(f"Loaded {len(self.en_to_cn)} dictionary entries from {csv_path}")
@@ -79,7 +72,6 @@ class DictionaryMatcher:
             raise TranslationError(f"Failed to load dictionary from {csv_path}: {e}")
     
     def find_matches(self, text: str, is_english: bool) -> List[Tuple[str, str, int, int]]:
-        """Find dictionary matches in text with improved error handling."""
         if not text.strip():
             return []
             
@@ -90,7 +82,6 @@ class DictionaryMatcher:
             logger.warning("Dictionary is empty")
             return []
         
-        # Sort terms by length (longest first) to handle overlap
         sorted_terms = sorted(dictionary.keys(), key=len, reverse=True)
         
         text_lower = text.lower() if is_english else text
@@ -107,7 +98,6 @@ class DictionaryMatcher:
                 
                 for match in pattern.finditer(search_text):
                     start, end = match.span()
-                    # Check if this position is already used
                     if not any(pos in used_positions for pos in range(start, end)):
                         matches.append((term, dictionary[term], start, end))
                         used_positions.update(range(start, end))
@@ -116,13 +106,13 @@ class DictionaryMatcher:
                 logger.warning(f"Regex error for term '{term}': {e}")
                 continue
         
-        return sorted(matches, key=lambda x: x[2])  # Sort by start position
+        return sorted(matches, key=lambda x: x[2])
 
 
 class TranslationService:
-    """Main translation service handling all LLM providers and dictionary matching."""
     
-    # Provider configurations
+    TECHNICAL_TRANSLATION_TEMPERATURE = 0.1
+    
     _PROVIDER_CONFIGS = {
         SupportedProvider.DEEPSEEK: ProviderConfig(
             endpoint=os.getenv("DEEPSEEK_ENDPOINT", "https://api.deepseek.com/chat/completions"),
@@ -139,7 +129,6 @@ class TranslationService:
     }
     
     def __init__(self, dictionary_file: Union[str, Path] = "QS-TB.csv"):
-        """Initialize translation service with dictionary matcher."""
         try:
             self.dictionary_matcher = DictionaryMatcher(dictionary_file)
         except (FileNotFoundError, TranslationError) as e:
@@ -147,12 +136,6 @@ class TranslationService:
             raise
     
     def detect_language(self, text: str) -> bool:
-        """
-        Detect if text is English (True) or Chinese (False).
-        
-        Uses unicode ranges to identify Chinese characters.
-        If less than 10% of non-space characters are Chinese, considers it English.
-        """
         if not text.strip():
             raise ValueError("Text cannot be empty")
             
@@ -166,29 +149,35 @@ class TranslationService:
         return chinese_ratio < 0.1
     
     def _prepare_dictionary_context(self, dictionary_matches: Optional[List[Tuple[str, str, int, int]]]) -> str:
-        """Prepare dictionary context for LLM prompt with only the terms found in the input text."""
         if not dictionary_matches:
             return ""
         
-        # Only include dictionary terms that were actually found in the input text
-        dict_context = "\n\nIMPORTANT: Use these specific dictionary translations when they appear in the text:\n"
+        dict_context = "\n\nTECHNICAL TERMINOLOGY: The following specialized terms must be translated exactly as specified:\n"
         for original_term, translated_term, _, _ in dictionary_matches:
             dict_context += f"- '{original_term}' → '{translated_term}'\n"
-        dict_context += "\nUse these exact translations for the matching terms, but translate the rest of the text normally."
+        dict_context += "\nThese are established technical translations that must be used consistently. Translate all other content while preserving the exact terminology above."
         
         return dict_context
     
     def _prepare_system_prompt(self, is_english: bool, dictionary_matches: Optional[List[Tuple[str, str, int, int]]]) -> str:
-        """Prepare the system prompt for translation with dictionary context."""
         direction = "from English to Chinese" if is_english else "from Chinese to English"
         dict_context = self._prepare_dictionary_context(dictionary_matches)
         
-        return (f"You are a translation service. Your only task is to translate text {direction}. "
-                f"Do not chat, do not explain, do not add greetings. "
-                f"Just provide the direct translation of the input text.{dict_context}")
+        base_prompt = (
+            f"You are a professional technical and scientific document translator specializing in {direction} translation. "
+            f"Your task is to provide accurate, precise, and consistent translations that maintain the technical rigor of the original text.\n\n"
+            f"Guidelines:\n"
+            f"- Preserve all technical terminology, scientific concepts, and numerical data exactly\n"
+            f"- Maintain the formal academic tone and structure of the original document\n"
+            f"- Keep abbreviations, formulas, citations, and references unchanged\n"
+            f"- Ensure consistency in terminology throughout the translation\n"
+            f"- Do not add explanations, interpretations, or additional content\n"
+            f"- Provide only the direct, professional translation of the input text"
+        )
+        
+        return base_prompt + dict_context
     
     def _validate_provider(self, provider: str) -> SupportedProvider:
-        """Validate and convert provider string to enum."""
         try:
             return SupportedProvider(provider)
         except ValueError:
@@ -199,7 +188,6 @@ class TranslationService:
     async def _call_llm_api(self, text: str, api_token: str, is_english: bool, 
                            dictionary_matches: Optional[List[Tuple[str, str, int, int]]], 
                            provider: str, model: Optional[str] = None) -> str:
-        """Unified method to call any LLM provider API."""
         provider_enum = self._validate_provider(provider)
         system_prompt = self._prepare_system_prompt(is_english, dictionary_matches)
         
@@ -211,7 +199,6 @@ class TranslationService:
     
     async def _call_openai_api(self, text: str, api_token: str, system_prompt: str, 
                               is_azure: bool, model: Optional[str]) -> str:
-        """Call OpenAI or Azure OpenAI API with improved error handling."""
         try:
             if is_azure:
                 azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
@@ -232,7 +219,8 @@ class TranslationService:
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"Translate: {text}"}
                     ],
-                    max_tokens=2000
+                    max_tokens=2000,
+                    temperature=self.TECHNICAL_TRANSLATION_TEMPERATURE
                 )
             else:
                 client = AsyncOpenAI(api_key=api_token)
@@ -245,7 +233,8 @@ class TranslationService:
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"Translate: {text}"}
                     ],
-                    max_tokens=2000
+                    max_tokens=2000,
+                    temperature=self.TECHNICAL_TRANSLATION_TEMPERATURE
                 )
             
             if not response.choices or not response.choices[0].message.content:
@@ -261,7 +250,6 @@ class TranslationService:
     
     async def _call_http_api(self, text: str, api_token: str, system_prompt: str, 
                             provider: SupportedProvider, model: Optional[str]) -> str:
-        """Call HTTP-based API providers (DeepSeek, Qwen) with improved error handling."""
         if provider not in self._PROVIDER_CONFIGS:
             raise ValueError(f"Unsupported HTTP provider: {provider}")
         
@@ -274,7 +262,8 @@ class TranslationService:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Translate: {text}"}
             ],
-            "max_tokens": config.max_tokens
+            "max_tokens": config.max_tokens,
+            "temperature": self.TECHNICAL_TRANSLATION_TEMPERATURE
         }
         
         headers = {
@@ -308,7 +297,6 @@ class TranslationService:
             raise APIError(f"{provider.value} API error: {e}")
     
     async def _handle_http_error(self, response: httpx.Response, provider: SupportedProvider) -> None:
-        """Handle HTTP API errors with detailed error messages."""
         error_detail = f"{provider.value} API error: {response.status_code}"
         
         try:
@@ -317,30 +305,12 @@ class TranslationService:
                 error_message = error_body["error"].get("message", "Unknown error")
                 error_detail += f" - {error_message}"
         except Exception:
-            # If we can't parse the error response, include raw text
             error_detail += f" - Response: {response.text[:200]}"
         
         raise APIError(error_detail)
     
     async def translate(self, text: str, llm_provider: str, api_token: str, 
                        model: Optional[str] = None) -> Tuple[str, List[Tuple[str, str, int, int]]]:
-        """
-        Main translation method that handles all providers.
-        
-        Args:
-            text: Text to translate
-            llm_provider: LLM provider name (chatgpt, deepseek, qwen, etc.)
-            api_token: API token for the provider
-            model: Optional model name override
-            
-        Returns:
-            Tuple of (translated_text, dictionary_matches)
-            
-        Raises:
-            ValueError: If text is empty or provider is unsupported
-            TranslationError: If translation fails
-            APIError: If API call fails
-        """
         if not text.strip():
             raise ValueError("Text cannot be empty")
         
@@ -365,30 +335,24 @@ class TranslationService:
             return translated, matches
             
         except (ValueError, APIError):
-            # Re-raise these as-is
             raise
         except Exception as e:
             logger.error(f"Translation failed: {e}")
             raise TranslationError(f"Translation failed: {e}")
     
-    def get_config(self) -> Dict[str, Dict[str, str]]:
-        """
-        Get default configuration for API tokens and models.
-        
-        Returns:
-            Dictionary containing default tokens and models for each provider
-        """
+    def get_config(self) -> Dict[str, Union[List[str], Dict[str, str]]]:
         return {
-            "default_tokens": {
-                SupportedProvider.CHATGPT.value: os.getenv("OPENAI_API_KEY", ""),
-                SupportedProvider.CHATGPT_AZURE.value: os.getenv("AZURE_OPENAI_API_KEY", ""),
-                SupportedProvider.DEEPSEEK.value: os.getenv("DEEPSEEK_API_KEY", ""),
-                SupportedProvider.QWEN.value: os.getenv("DASHSCOPE_API_KEY", "")
-            },
+            "supported_providers": [provider.value for provider in SupportedProvider],
             "default_models": {
                 SupportedProvider.CHATGPT.value: os.getenv("OPENAI_DEFAULT_MODEL", "gpt-4o-mini"),
                 SupportedProvider.CHATGPT_AZURE.value: os.getenv("AZURE_OPENAI_DEFAULT_MODEL", "gpt-4o-mini"),
                 SupportedProvider.DEEPSEEK.value: os.getenv("DEEPSEEK_DEFAULT_MODEL", "deepseek-chat"),
                 SupportedProvider.QWEN.value: os.getenv("QWEN_DEFAULT_MODEL", "qwen-turbo")
+            },
+            "default_tokens": {
+                SupportedProvider.CHATGPT.value: os.getenv("OPENAI_API_KEY", ""),
+                SupportedProvider.CHATGPT_AZURE.value: os.getenv("AZURE_OPENAI_API_KEY", ""),
+                SupportedProvider.DEEPSEEK.value: os.getenv("DEEPSEEK_API_KEY", ""),
+                SupportedProvider.QWEN.value: os.getenv("DASHSCOPE_API_KEY", "")
             }
         }
