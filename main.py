@@ -18,6 +18,7 @@ class TranslationRequest(BaseModel):
     text: str
     llm_provider: str
     api_token: str
+    model: Optional[str] = None
 
 class TranslationResponse(BaseModel):
     translated_text: str
@@ -67,7 +68,7 @@ class DictionaryMatcher:
 
 dictionary_matcher = DictionaryMatcher("QS-TB.csv")
 
-async def call_chatgpt(text: str, api_token: str, is_english: bool, dictionary_matches: List[Tuple[str, str, int, int]] = None, is_azure: bool = False) -> str:
+async def call_chatgpt(text: str, api_token: str, is_english: bool, dictionary_matches: Optional[List[Tuple[str, str, int, int]]] = None, is_azure: bool = False, model: Optional[str] = None) -> str:
     direction = "from English to Chinese" if is_english else "from Chinese to English"
     
     # Prepare dictionary context for the prompt
@@ -90,7 +91,9 @@ async def call_chatgpt(text: str, api_token: str, is_english: bool, dictionary_m
             azure_endpoint=azure_endpoint,
             api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2023-12-01-preview")
         )
-        deployment_name = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+        # Use model parameter or default model from environment
+        default_model = os.getenv("AZURE_OPENAI_DEFAULT_MODEL", "gpt-4o-mini")
+        deployment_name = model if model else default_model
         
         response = await client.chat.completions.create(
             model=deployment_name,
@@ -102,9 +105,11 @@ async def call_chatgpt(text: str, api_token: str, is_english: bool, dictionary_m
         )
     else:
         client = AsyncOpenAI(api_key=api_token)
+        default_model = os.getenv("OPENAI_DEFAULT_MODEL", "gpt-4o-mini")
+        selected_model = model if model else default_model
         
         response = await client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=selected_model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Translate: {text}"}
@@ -112,10 +117,10 @@ async def call_chatgpt(text: str, api_token: str, is_english: bool, dictionary_m
             max_tokens=2000
         )
     
-    return response.choices[0].message.content.strip()
+    return response.choices[0].message.content.strip() if response.choices[0].message.content else ""
 
-async def call_deepseek(text: str, api_token: str, is_english: bool, dictionary_matches: List[Tuple[str, str, int, int]] = None) -> str:
-    endpoint = os.getenv("DEEPSEEK_ENDPOINT", "https://api.deepseek.com/v1/chat/completions")
+async def call_deepseek(text: str, api_token: str, is_english: bool, dictionary_matches: Optional[List[Tuple[str, str, int, int]]] = None, model: Optional[str] = None) -> str:
+    endpoint = os.getenv("DEEPSEEK_ENDPOINT", "https://api.deepseek.com/chat/completions")
     
     # Prepare dictionary context for the prompt
     dict_context = ""
@@ -127,6 +132,9 @@ async def call_deepseek(text: str, api_token: str, is_english: bool, dictionary_
     
     system_prompt = f"You are a translation service. Your only task is to translate text {'from English to Chinese' if is_english else 'from Chinese to English'}. Do not chat, do not explain, do not add greetings. Just provide the direct translation of the input text.{dict_context}"
     
+    default_model = os.getenv("DEEPSEEK_DEFAULT_MODEL", "deepseek-chat")
+    selected_model = model if model else default_model
+    
     async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(
             endpoint,
@@ -135,7 +143,7 @@ async def call_deepseek(text: str, api_token: str, is_english: bool, dictionary_
                 "Content-Type": "application/json"
             },
             json={
-                "model": "deepseek-chat",
+                "model": selected_model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Translate: {text}"}
@@ -157,8 +165,8 @@ async def call_deepseek(text: str, api_token: str, is_english: bool, dictionary_
         result = response.json()
         return result["choices"][0]["message"]["content"].strip()
 
-async def call_qwen(text: str, api_token: str, is_english: bool, dictionary_matches: List[Tuple[str, str, int, int]] = None) -> str:
-    endpoint = os.getenv("QWEN_ENDPOINT", "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation")
+async def call_qwen(text: str, api_token: str, is_english: bool, dictionary_matches: Optional[List[Tuple[str, str, int, int]]] = None, model: Optional[str] = None) -> str:
+    endpoint = os.getenv("QWEN_ENDPOINT", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")
     
     # Prepare dictionary context for the prompt
     dict_context = ""
@@ -170,6 +178,9 @@ async def call_qwen(text: str, api_token: str, is_english: bool, dictionary_matc
     
     system_prompt = f"You are a translation service. Your only task is to translate text {'from English to Chinese' if is_english else 'from Chinese to English'}. Do not chat, do not explain, do not add greetings. Just provide the direct translation of the input text.{dict_context}"
     
+    default_model = os.getenv("QWEN_DEFAULT_MODEL", "qwen-turbo")
+    selected_model = model if model else default_model
+    
     async with httpx.AsyncClient() as client:
         response = await client.post(
             endpoint,
@@ -178,16 +189,12 @@ async def call_qwen(text: str, api_token: str, is_english: bool, dictionary_matc
                 "Content-Type": "application/json"
             },
             json={
-                "model": "qwen-turbo",
-                "input": {
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Translate: {text}"}
-                    ]
-                },
-                "parameters": {
-                    "max_tokens": 2000
-                }
+                "model": selected_model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Translate: {text}"}
+                ],
+                "max_tokens": 2000
             }
         )
         
@@ -195,7 +202,7 @@ async def call_qwen(text: str, api_token: str, is_english: bool, dictionary_matc
             raise HTTPException(status_code=400, detail="Qwen API error")
         
         result = response.json()
-        return result["output"]["text"].strip()
+        return result["choices"][0]["message"]["content"].strip()
 
 def detect_language(text: str) -> bool:
     chinese_chars = re.findall(r'[\u4e00-\u9fff]', text)
@@ -214,13 +221,13 @@ async def translate_text(request: TranslationRequest):
         
         # Call the appropriate LLM with dictionary context
         if request.llm_provider == "chatgpt":
-            translated = await call_chatgpt(request.text, request.api_token, is_english, matches, False)
+            translated = await call_chatgpt(request.text, request.api_token, is_english, matches, False, request.model)
         elif request.llm_provider == "chatgpt(azure)":
-            translated = await call_chatgpt(request.text, request.api_token, is_english, matches, True)
+            translated = await call_chatgpt(request.text, request.api_token, is_english, matches, True, request.model)
         elif request.llm_provider == "deepseek":
-            translated = await call_deepseek(request.text, request.api_token, is_english, matches)
+            translated = await call_deepseek(request.text, request.api_token, is_english, matches, request.model)
         elif request.llm_provider == "qwen":
-            translated = await call_qwen(request.text, request.api_token, is_english, matches)
+            translated = await call_qwen(request.text, request.api_token, is_english, matches, request.model)
         else:
             raise HTTPException(status_code=400, detail="Unsupported LLM provider")
         
@@ -239,7 +246,13 @@ async def get_config():
             "chatgpt": os.getenv("OPENAI_API_KEY", ""),
             "chatgpt(azure)": os.getenv("AZURE_OPENAI_API_KEY", ""),
             "deepseek": os.getenv("DEEPSEEK_API_KEY", ""),
-            "qwen": os.getenv("QWEN_API_KEY", "")
+            "qwen": os.getenv("DASHSCOPE_API_KEY", "")
+        },
+        "default_models": {
+            "chatgpt": os.getenv("OPENAI_DEFAULT_MODEL", "gpt-4o-mini"),
+            "chatgpt(azure)": os.getenv("AZURE_OPENAI_DEFAULT_MODEL", "gpt-4o-mini"),
+            "deepseek": os.getenv("DEEPSEEK_DEFAULT_MODEL", "deepseek-chat"),
+            "qwen": os.getenv("QWEN_DEFAULT_MODEL", "qwen-turbo")
         }
     }
 
@@ -260,4 +273,20 @@ async def serve_index():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import sys
+    from pathlib import Path
+    
+    # Determine if running as executable or script
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        reload = False
+        print("Running as standalone executable...")
+    else:
+        # Running as script
+        reload = True
+        print("Running in development mode...")
+    
+    print(f"Starting server on http://localhost:8099")
+    print("Press Ctrl+C to stop the server")
+    
+    uvicorn.run("main:app", host="localhost", port=8099, reload=reload)
