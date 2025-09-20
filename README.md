@@ -28,31 +28,6 @@
 | **OpenAI ChatGPT** | gpt-4o-mini | Most reliable, high quality | Medium |
 | **Azure OpenAI** | gpt-4o-mini | Enterprise-grade reliability | Medium |
 
-## Screenshot
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    MRCT BOOK Translator                    │
-│              English ⇄ Chinese Translation                 │
-├─────────────────┬───────────────────────────────────────────┤
-│ LLM Provider:   │ Text to Translate:                      │
-│ ▼ Qwen          │ ┌─────────────────────────────────────┐ │
-│                 │ │ Enter text to translate...          │ │
-│ API Token:      │ │                                     │ │
-│ ********        │ │                                     │ │
-│                 │ └─────────────────────────────────────┘ │
-│ Technical Dict. │                                         │
-│ Download CSV    │ [Translate]                            │
-│                 │                                         │
-│                 │ Translation Result:                     │
-│                 │ ┌─────────────────────────────────────┐ │
-│                 │ │ Translated text appears here...     │ │
-│                 │ │                                     │ │
-│                 │ └─────────────────────────────────────┘ │
-│                 │ [Copy to Clipboard]                    │
-└─────────────────┴───────────────────────────────────────────┘
-```
-
 ## Quick Start
 
 ### Prerequisites
