@@ -208,7 +208,8 @@ The application will start on `http://localhost:8099`. Open your web browser and
 
 ```
 mrct_trans/
-├── main.py                      # FastAPI backend server
+├── main.py                      # FastAPI web server and API endpoints
+├── translator.py                # Translation service core logic
 ├── static/                      # Web frontend files
 │   ├── index.html              # Main web interface
 │   ├── style.css               # Styling
@@ -220,6 +221,16 @@ mrct_trans/
 ├── INSTALLATION.md            # This file
 └── API_KEY_Application_Guide.md # API key setup guide
 ```
+
+## 🏗️ Architecture Overview
+
+The application uses a modular architecture:
+
+- **`main.py`**: FastAPI web server handling HTTP requests and routing
+- **`translator.py`**: Core translation service with two main classes:
+  - `TranslationService`: Main service coordinating all translation operations
+  - `DictionaryMatcher`: Technical dictionary lookup and context preparation
+- **`static/`**: Frontend web interface for user interaction
 
 ## 🛠️ Troubleshooting
 
