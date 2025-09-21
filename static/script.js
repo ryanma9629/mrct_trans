@@ -191,7 +191,7 @@ class TranslationApp {
             highlightedText += translatedText.substring(lastEnd, pos.start);
             
             // Add the highlighted term
-            highlightedText += `<span class="dictionary-match" title="Dictionary: ${pos.originalTerm} → ${pos.translatedTerm}">${pos.translatedTerm}</span>`;
+            highlightedText += `<span class="dictionary-match" title="${pos.originalTerm} → ${pos.translatedTerm}">${pos.translatedTerm}</span>`;
             
             lastEnd = pos.end;
         });
