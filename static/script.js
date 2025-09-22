@@ -14,6 +14,9 @@ class TranslationApp {
         this.copyBtn = document.getElementById('copy-btn');
         this.loading = document.getElementById('loading');
         this.errorMessage = document.getElementById('error-message');
+        this.ragEnabled = document.getElementById('rag-enabled');
+        this.chapterSelection = document.getElementById('chapter-selection');
+        this.chapterNumber = document.getElementById('chapter-number');
     }
 
     bindEvents() {
@@ -29,6 +32,9 @@ class TranslationApp {
 
         // Auto-fill API token when provider changes
         this.llmProvider.addEventListener('change', () => this.updateApiToken());
+        
+        // RAG toggle event
+        this.ragEnabled.addEventListener('change', () => this.toggleRagControls());
     }
 
     async loadConfig() {
@@ -47,6 +53,19 @@ class TranslationApp {
         const provider = this.llmProvider.value;
         if (this.defaultTokens && this.defaultTokens[provider]) {
             this.apiToken.value = this.defaultTokens[provider];
+        }
+    }
+
+    toggleRagControls() {
+        const isRagEnabled = this.ragEnabled.checked;
+        
+        if (isRagEnabled) {
+            this.chapterSelection.style.display = 'block';
+            this.chapterNumber.required = true;
+        } else {
+            this.chapterSelection.style.display = 'none';
+            this.chapterNumber.required = false;
+            this.chapterNumber.value = '';
         }
     }
 
@@ -72,6 +91,8 @@ class TranslationApp {
         const text = this.inputText.value.trim();
         const provider = this.llmProvider.value;
         const token = this.apiToken.value.trim();
+        const ragEnabled = this.ragEnabled.checked;
+        const chapterNumber = this.chapterNumber.value;
 
         if (!text) {
             this.showError('Please enter text to translate');
@@ -83,19 +104,32 @@ class TranslationApp {
             return;
         }
 
+        if (ragEnabled && !chapterNumber) {
+            this.showError('Please select a chapter number when RAG is enabled');
+            return;
+        }
+
         this.showLoading();
 
         try {
+            const requestBody = {
+                text: text,
+                llm_provider: provider,
+                api_token: token,
+                rag: ragEnabled
+            };
+
+            // Add chapter number if RAG is enabled
+            if (ragEnabled && chapterNumber) {
+                requestBody.chapter_number = parseInt(chapterNumber);
+            }
+
             const response = await fetch('/translate', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    text: text,
-                    llm_provider: provider,
-                    api_token: token
-                })
+                body: JSON.stringify(requestBody)
             });
 
             if (!response.ok) {
@@ -104,7 +138,7 @@ class TranslationApp {
             }
 
             const result = await response.json();
-            this.displayTranslation(result.translated_text, result.dictionary_matches);
+            this.displayTranslation(result.translated_text, result.dictionary_matches, result.retrieved_contexts);
 
         } catch (error) {
             this.showError(`Translation error: ${error.message}`);
@@ -113,12 +147,24 @@ class TranslationApp {
         }
     }
 
-    displayTranslation(translatedText, dictionaryMatches) {
+    displayTranslation(translatedText, dictionaryMatches, retrievedContexts) {
         // Clear previous content
         this.outputText.innerHTML = '';
 
+        // Show RAG context information if available
+        if (retrievedContexts && retrievedContexts.length > 0) {
+            const contextInfo = document.createElement('div');
+            contextInfo.style.cssText = 'background-color: #e8f4fd; border: 1px solid #bee5eb; border-radius: 4px; padding: 10px; margin-bottom: 15px; font-size: 12px; color: #0c5460;';
+            contextInfo.innerHTML = `<strong>RAG Context:</strong> Found ${retrievedContexts.length} relevant context chunk(s) from the selected chapter.`;
+            this.outputText.appendChild(contextInfo);
+        }
+
+        // Create translation text container
+        const translationContainer = document.createElement('div');
+
         if (!dictionaryMatches || dictionaryMatches.length === 0) {
-            this.outputText.textContent = translatedText;
+            translationContainer.textContent = translatedText;
+            this.outputText.appendChild(translationContainer);
             return;
         }
 
@@ -199,7 +245,8 @@ class TranslationApp {
         // Add remaining text
         highlightedText += translatedText.substring(lastEnd);
 
-        this.outputText.innerHTML = highlightedText;
+        translationContainer.innerHTML = highlightedText;
+        this.outputText.appendChild(translationContainer);
     }
 
     async copyToClipboard() {

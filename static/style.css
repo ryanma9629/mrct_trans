@@ -51,7 +51,7 @@ header p {
     height: fit-content;
 }
 
-.llm-selection, .api-token {
+.llm-selection, .api-token, .rag-settings {
     margin-bottom: 20px;
 }
 
@@ -60,6 +60,131 @@ header p {
     margin-bottom: 8px;
     font-weight: 600;
     color: #2c3e50;
+}
+
+/* RAG Settings Styles */
+.rag-settings {
+    border: 2px solid #ecf0f1;
+    border-radius: 8px;
+    padding: 15px;
+    background-color: #f8f9fa;
+}
+
+.rag-settings h3 {
+    color: #2c3e50;
+    margin-bottom: 15px;
+    font-size: 16px;
+}
+
+.rag-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.rag-toggle label[for="rag-enabled"] {
+    margin-bottom: 0;
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+/* Toggle Switch Styles */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+    margin-bottom: 0;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: #3498db;
+}
+
+input:focus + .slider {
+    box-shadow: 0 0 1px #3498db;
+}
+
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+.slider.round {
+    border-radius: 24px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+.chapter-selection {
+    margin-bottom: 10px;
+}
+
+.chapter-selection label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+#chapter-number {
+    width: 100%;
+    padding: 8px;
+    border: 2px solid #ecf0f1;
+    border-radius: 5px;
+    font-size: 14px;
+    background-color: white;
+}
+
+#chapter-number:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+#chapter-number:disabled {
+    background-color: #f5f5f5;
+    color: #7f8c8d;
+    cursor: not-allowed;
+}
+
+.rag-description {
+    margin-top: 10px;
+}
+
+.rag-description p {
+    color: #7f8c8d;
+    font-style: italic;
+    line-height: 1.4;
 }
 
 #llm-provider {

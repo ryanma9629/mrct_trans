@@ -46,6 +46,8 @@ class TranslationRequest(BaseModel):
     llm_provider: str
     api_token: str
     model: Optional[str] = None
+    rag: bool = False
+    chapter_number: Optional[int] = None
 
     class Config:
         schema_extra = {
@@ -53,7 +55,9 @@ class TranslationRequest(BaseModel):
                 "text": "Hello, world!",
                 "llm_provider": "chatgpt",
                 "api_token": "your-api-token",
-                "model": "gpt-3.5-turbo"
+                "model": "gpt-3.5-turbo",
+                "rag": False,
+                "chapter_number": 1
             }
         }
 
@@ -61,12 +65,14 @@ class TranslationRequest(BaseModel):
 class TranslationResponse(BaseModel):
     translated_text: str
     dictionary_matches: List[Tuple[str, str, int, int]]
+    retrieved_contexts: Optional[List[str]] = []
     
     class Config:
         schema_extra = {
             "example": {
                 "translated_text": "你好，世界！",
-                "dictionary_matches": [["Hello", "你好", 0, 5]]
+                "dictionary_matches": [["Hello", "你好", 0, 5]],
+                "retrieved_contexts": ["Context from the book..."]
             }
         }
 
@@ -124,16 +130,19 @@ async def translate_text(request: TranslationRequest):
         )
     
     try:
-        translated, matches = await translation_service.translate(
+        translated, matches, contexts = await translation_service.translate(
             request.text, 
             request.llm_provider, 
             request.api_token, 
-            request.model
+            request.model,
+            request.rag,
+            request.chapter_number
         )
         
         return TranslationResponse(
             translated_text=translated,
-            dictionary_matches=matches
+            dictionary_matches=matches,
+            retrieved_contexts=contexts
         )
     
     except Exception as e:

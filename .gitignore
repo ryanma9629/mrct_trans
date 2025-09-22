@@ -221,3 +221,9 @@ logs/
 # Cache directories
 .cache/
 cache/
+
+# PDF files directory
+pdf/
+
+# ChromaDB vector database
+chroma_db/

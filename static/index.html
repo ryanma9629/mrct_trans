@@ -30,6 +30,47 @@
                     <input type="password" id="api-token" placeholder="Enter your API token">
                 </div>
                 
+                <div class="rag-settings">
+                    <h3>RAG Enhanced Translation</h3>
+                    <div class="rag-toggle">
+                        <label class="switch">
+                            <input type="checkbox" id="rag-enabled">
+                            <span class="slider round"></span>
+                        </label>
+                        <label for="rag-enabled">Enable RAG Context</label>
+                    </div>
+                    
+                    <div class="chapter-selection" id="chapter-selection" style="display: none;">
+                        <label for="chapter-number">Chapter Number:</label>
+                        <select id="chapter-number">
+                            <option value="">Select Chapter</option>
+                            <option value="1">Chapter 1</option>
+                            <option value="2">Chapter 2</option>
+                            <option value="3">Chapter 3</option>
+                            <option value="4">Chapter 4</option>
+                            <option value="5">Chapter 5</option>
+                            <option value="6">Chapter 6</option>
+                            <option value="7">Chapter 7</option>
+                            <option value="8">Chapter 8</option>
+                            <option value="9">Chapter 9</option>
+                            <option value="10">Chapter 10</option>
+                            <option value="11">Chapter 11</option>
+                            <option value="12">Chapter 12</option>
+                            <option value="13">Chapter 13</option>
+                            <option value="14">Chapter 14</option>
+                            <option value="15">Chapter 15</option>
+                            <option value="16">Chapter 16</option>
+                            <option value="17">Chapter 17</option>
+                            <option value="18">Chapter 18</option>
+                            <option value="19">Chapter 19</option>
+                        </select>
+                    </div>
+                    
+                    <div class="rag-description">
+                        <p><small>RAG uses book context to improve translation accuracy. Chapter selection is required when enabled.</small></p>
+                    </div>
+                </div>
+                
                 <div class="dictionary-download">
                     <h3>Technical Glossary</h3>
                     <p>QS-TB.csv contains technical terms for accurate translation</p>
