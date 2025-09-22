@@ -41,6 +41,17 @@ def load_pdfs_to_chromadb():
         # Load PDF
         loader = PyPDFLoader(pdf_path)
         documents = loader.load()
+        
+        # Extract chapter name from filename (e.g., "Chapter11.pdf" -> "Chapter11")
+        chapter_name = os.path.splitext(pdf_file)[0]
+        
+        # Update metadata to ensure consistent source field
+        for doc in documents:
+            doc.metadata['source'] = chapter_name
+            doc.metadata['filename'] = pdf_file
+            doc.metadata['filepath'] = pdf_path
+        
+        print(f"Updated metadata for {len(documents)} documents with source='{chapter_name}'")
 
         # Split text into chunks
         text_splitter = RecursiveCharacterTextSplitter(
@@ -48,10 +59,16 @@ def load_pdfs_to_chromadb():
             chunk_overlap=200
         )
         chunks = text_splitter.split_documents(documents)
+        
+        # Ensure chunks inherit the metadata
+        for chunk in chunks:
+            chunk.metadata['source'] = chapter_name
+            chunk.metadata['filename'] = pdf_file
+            chunk.metadata['filepath'] = pdf_path
 
         # Add chunks to ChromaDB
         vectorstore.add_documents(chunks)
-        print(f"Finished processing {pdf_file}.")
+        print(f"Finished processing {pdf_file} - added {len(chunks)} chunks with source='{chapter_name}'.")
 
     print("All PDFs have been processed and stored in ChromaDB.")
 

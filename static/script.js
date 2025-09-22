@@ -138,7 +138,7 @@ class TranslationApp {
             }
 
             const result = await response.json();
-            this.displayTranslation(result.translated_text, result.dictionary_matches, result.retrieved_contexts);
+            this.displayTranslation(result.translated_text, result.dictionary_matches, result.retrieved_contexts, result.similarity_scores);
 
         } catch (error) {
             this.showError(`Translation error: ${error.message}`);
@@ -147,7 +147,7 @@ class TranslationApp {
         }
     }
 
-    displayTranslation(translatedText, dictionaryMatches, retrievedContexts) {
+    displayTranslation(translatedText, dictionaryMatches, retrievedContexts, similarityScores) {
         // Clear previous content
         this.outputText.innerHTML = '';
 
@@ -155,7 +155,16 @@ class TranslationApp {
         if (retrievedContexts && retrievedContexts.length > 0) {
             const contextInfo = document.createElement('div');
             contextInfo.style.cssText = 'background-color: #e8f4fd; border: 1px solid #bee5eb; border-radius: 4px; padding: 10px; margin-bottom: 15px; font-size: 12px; color: #0c5460;';
-            contextInfo.innerHTML = `<strong>RAG Context:</strong> Found ${retrievedContexts.length} relevant context chunk(s) from the selected chapter.`;
+            
+            let contextMessage = `<strong>RAG Context:</strong> Found ${retrievedContexts.length} relevant context chunk(s) from the selected chapter.`;
+            
+            // Add similarity scores if available
+            if (similarityScores && similarityScores.length > 0) {
+                const avgScore = similarityScores.reduce((sum, score) => sum + score, 0) / similarityScores.length;
+                contextMessage += ` <span style="color: #495057;">(Similarity: ${(avgScore * 100).toFixed(1)}%)</span>`;
+            }
+            
+            contextInfo.innerHTML = contextMessage;
             this.outputText.appendChild(contextInfo);
         }
 

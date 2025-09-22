@@ -66,13 +66,15 @@ class TranslationResponse(BaseModel):
     translated_text: str
     dictionary_matches: List[Tuple[str, str, int, int]]
     retrieved_contexts: Optional[List[str]] = []
+    similarity_scores: Optional[List[float]] = []
     
     class Config:
         schema_extra = {
             "example": {
                 "translated_text": "你好，世界！",
                 "dictionary_matches": [["Hello", "你好", 0, 5]],
-                "retrieved_contexts": ["Context from the book..."]
+                "retrieved_contexts": ["Context from the book..."],
+                "similarity_scores": [0.8523]
             }
         }
 
@@ -130,7 +132,7 @@ async def translate_text(request: TranslationRequest):
         )
     
     try:
-        translated, matches, contexts = await translation_service.translate(
+        translated, matches, contexts, scores = await translation_service.translate(
             request.text, 
             request.llm_provider, 
             request.api_token, 
@@ -142,7 +144,8 @@ async def translate_text(request: TranslationRequest):
         return TranslationResponse(
             translated_text=translated,
             dictionary_matches=matches,
-            retrieved_contexts=contexts
+            retrieved_contexts=contexts,
+            similarity_scores=scores
         )
     
     except Exception as e:

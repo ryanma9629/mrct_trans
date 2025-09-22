@@ -262,10 +262,10 @@ class TranslationService:
             logger.info("ChromaDB vector store initialized successfully")
     
     def _retrieve_context(self, text: str, chapter_number: int, 
-                         num_contexts: int = DEFAULT_RAG_CONTEXTS) -> List[str]:
+                         num_contexts: int = DEFAULT_RAG_CONTEXTS) -> Tuple[List[str], List[float]]:
         """
         Retrieve relevant context from the vector database.
-        Only retrieves from the specified chapter. Returns empty list if no context found.
+        Only retrieves from the specified chapter. Returns empty lists if no context found.
         
         Args:
             text: The text to find similar content for
@@ -273,33 +273,33 @@ class TranslationService:
             num_contexts: Number of context chunks to retrieve (default: 1)
             
         Returns:
-            List of relevant text chunks (max num_contexts, empty if none found)
+            Tuple of (contexts, similarity_scores) - both empty lists if none found
         """
         if not self.vectorstore:
             logger.warning("Vector store not initialized, context retrieval skipped")
-            return []
+            return [], []
         
         try:
             logger.info(f"Starting context retrieval for Chapter {chapter_number} (max {num_contexts} contexts)")
             logger.debug(f"Query text (first {LOG_PREVIEW_CHARS} chars): {text[:LOG_PREVIEW_CHARS]}...")
             
-            # Retrieve documents using metadata filtering or fallback
-            docs = self._search_with_chapter_filter(text, chapter_number, num_contexts)
+            # Retrieve documents using metadata filtering with scores
+            docs_with_scores = self._search_with_chapter_filter(text, chapter_number, num_contexts)
             
-            if not docs:
+            if not docs_with_scores:
                 logger.warning(f"No documents found for Chapter {chapter_number}. "
                               f"Either Chapter{chapter_number}.pdf was not loaded or metadata filtering failed.")
-                return []
+                return [], []
             
-            # Extract contexts and log details
-            contexts = self._extract_contexts_from_docs(docs, chapter_number)
+            # Extract contexts and scores
+            contexts, scores = self._extract_contexts_from_docs(docs_with_scores, chapter_number)
             
-            return contexts
+            return contexts, scores
             
         except Exception as e:
             logger.error(f"Error during context retrieval: {e}")
             logger.error("Traceback:", exc_info=True)
-            return []
+            return [], []
     
     def _search_with_chapter_filter(self, text: str, chapter_number: int, num_contexts: int) -> List:
         """Search for documents with chapter filtering. Returns empty list if filtering fails."""
@@ -307,46 +307,120 @@ class TranslationService:
             return []
             
         chapter_filter = f"Chapter{chapter_number}"
-        logger.debug(f"Filtering documents by source containing: {chapter_filter}")
+        logger.debug(f"Searching for documents from: {chapter_filter}")
         
         try:
-            # Try ChromaDB metadata filtering
-            metadata_filter = {"source": chapter_filter}
-            docs = self.vectorstore.similarity_search(
-                text,
-                k=num_contexts,
-                filter=metadata_filter
-            )
-            logger.debug(f"Metadata filtering successful - found {len(docs)} documents")
-            return docs
+            # Try different metadata filter variations that might exist in the database
+            filter_variations = [
+                {"source": chapter_filter},                    # e.g., "Chapter11"
+                {"source": f"{chapter_filter}.pdf"},          # e.g., "Chapter11.pdf"
+                {"source": f"pdf/{chapter_filter}.pdf"},      # e.g., "pdf/Chapter11.pdf"
+                {"source": f"pdf\\{chapter_filter}.pdf"},     # e.g., "pdf\Chapter11.pdf"
+            ]
             
-        except Exception as filter_error:
-            logger.warning(f"Metadata filtering failed: {filter_error}")
+            for i, filter_var in enumerate(filter_variations):
+                try:
+                    logger.debug(f"Trying filter variation {i+1}: {filter_var}")
+                    # Use similarity_search_with_score to get similarity scores
+                    docs_with_scores = self.vectorstore.similarity_search_with_score(
+                        text,
+                        k=num_contexts,
+                        filter=filter_var
+                    )
+                    if docs_with_scores:
+                        logger.info(f"Successfully found {len(docs_with_scores)} documents using filter: {filter_var}")
+                        # Log similarity scores
+                        for j, (doc, score) in enumerate(docs_with_scores):
+                            logger.debug(f"Document {j+1} similarity score: {score:.4f}")
+                        return docs_with_scores  # Return tuples of (document, score)
+                    else:
+                        logger.debug(f"Filter variation {i+1} returned 0 documents")
+                except Exception as filter_error:
+                    logger.debug(f"Filter variation {i+1} failed: {filter_error}")
+            
+            # If exact filtering fails, try a more permissive approach
+            logger.debug("Exact filtering failed, trying manual post-filtering as fallback...")
+            try:
+                # Get more documents and filter manually
+                candidate_docs_with_scores = self.vectorstore.similarity_search_with_score(text, k=30)
+                logger.debug(f"Retrieved {len(candidate_docs_with_scores)} candidate documents for manual filtering")
+                
+                filtered_docs = []
+                for doc, score in candidate_docs_with_scores:
+                    source = doc.metadata.get('source', '')
+                    # Check if the source contains our chapter identifier
+                    if chapter_filter in source:
+                        filtered_docs.append((doc, score))
+                        logger.debug(f"Found matching document with source: {source}, score: {score:.4f}")
+                        if len(filtered_docs) >= num_contexts:
+                            break
+                
+                if filtered_docs:
+                    logger.info(f"Manual filtering found {len(filtered_docs)} documents for {chapter_filter}")
+                    return filtered_docs
+                
+            except Exception as manual_filter_error:
+                logger.debug(f"Manual filtering also failed: {manual_filter_error}")
+            
+            # If we get here, no filtering worked
+            logger.warning(f"No documents found for {chapter_filter} with any filtering method")
+            
+            # DEBUG: Let's check what documents are actually available
+            try:
+                sample_docs = self.vectorstore.similarity_search(text, k=3)
+                if sample_docs:
+                    logger.debug("Available documents sample (first 3):")
+                    for i, doc in enumerate(sample_docs):
+                        logger.debug(f"  Document {i+1} metadata: {doc.metadata}")
+                else:
+                    logger.warning("No documents found in database at all!")
+            except Exception as debug_error:
+                logger.debug(f"Could not retrieve sample documents: {debug_error}")
+            
             logger.info("Falling back to non-RAG translation")
-            return []  # Return empty list to trigger non-RAG fallback
-    
-    def _extract_contexts_from_docs(self, docs: List, chapter_number: int) -> List[str]:
-        """Extract context strings from documents and log details."""
-        if not docs:
-            logger.info(f"No documents found for Chapter {chapter_number}")
             return []
             
-        logger.info(f"Found {len(docs)} documents from Chapter {chapter_number}")
+        except Exception as general_error:
+            logger.warning(f"Chapter filtering failed with error: {general_error}")
+            logger.info("Falling back to non-RAG translation")
+            return []
+    
+    def _extract_contexts_from_docs(self, docs_with_scores: List, chapter_number: int) -> Tuple[List[str], List[float]]:
+        """
+        Extract context strings from documents with scores and log details.
+        
+        Returns:
+            Tuple of (contexts, similarity_scores)
+        """
+        if not docs_with_scores:
+            logger.info(f"No documents found for Chapter {chapter_number}")
+            return [], []
+            
+        logger.info(f"Found {len(docs_with_scores)} documents from Chapter {chapter_number}")
         
         contexts = []
-        for i, doc in enumerate(docs):
+        scores = []
+        
+        for i, (doc, score) in enumerate(docs_with_scores):
             source = doc.metadata.get('source', '')
             content = doc.page_content
             
-            logger.debug(f"Document {i+1}: source='{source}', content_length={len(content)}")
+            logger.debug(f"Document {i+1}: source='{source}', content_length={len(content)}, similarity_score={score:.4f}")
             logger.debug(f"Context {i+1} preview (first {CONTEXT_PREVIEW_CHARS} chars): {content[:CONTEXT_PREVIEW_CHARS]}...")
+            logger.info(f"Retrieved context {i+1} from {source}:")
+            logger.info(f"--- CONTEXT {i+1} START ---")
+            logger.info(content)
+            logger.info(f"--- CONTEXT {i+1} END ---")
+            
             contexts.append(content)
+            scores.append(score)
         
         total_context_length = sum(len(ctx) for ctx in contexts)
+        avg_score = sum(scores) / len(scores) if scores else 0
         logger.info(f"Context retrieval completed: {len(contexts)} contexts from Chapter {chapter_number}")
-        logger.debug(f"Total context length: {total_context_length} characters")
+        logger.info(f"Average similarity score: {avg_score:.4f}, Total context length: {total_context_length} characters")
         
-        return contexts
+        return contexts, scores
 
     def detect_language(self, text: str) -> bool:
         if not text.strip():
@@ -544,7 +618,7 @@ class TranslationService:
     
     async def translate(self, text: str, llm_provider: str, api_token: str, 
                        model: Optional[str] = None, rag: bool = False,
-                       chapter_number: Optional[int] = None) -> Tuple[str, List[Tuple[str, str, int, int]], List[str]]:
+                       chapter_number: Optional[int] = None) -> Tuple[str, List[Tuple[str, str, int, int]], List[str], List[float]]:
         """
         Translate text with optional RAG enhancement.
         
@@ -557,7 +631,7 @@ class TranslationService:
             chapter_number: Chapter number for RAG context (required if rag=True)
             
         Returns:
-            Tuple of (translated_text, dictionary_matches, contexts)
+            Tuple of (translated_text, dictionary_matches, contexts, similarity_scores)
         """
         # Validate inputs
         self._validate_translation_inputs(text, api_token, rag, chapter_number)
@@ -571,7 +645,7 @@ class TranslationService:
                        f"RAG: {rag}, Chapter: {chapter_number}, Dictionary matches: {len(matches)}")
             
             # Handle RAG context retrieval
-            contexts, effective_rag = self._handle_rag_context(rag, text, chapter_number)
+            contexts, scores, effective_rag = self._handle_rag_context(rag, text, chapter_number)
             
             logger.info(f"Proceeding with translation: RAG={effective_rag}, contexts={len(contexts)}, "
                        f"matches={len(matches)}")
@@ -586,9 +660,9 @@ class TranslationService:
             
             # Log completion summary
             self._log_translation_summary(len(text), len(translated), effective_rag, 
-                                        len(contexts), len(matches), rag, chapter_number)
+                                        len(contexts), len(matches), rag, chapter_number, scores)
             
-            return translated, matches, contexts
+            return translated, matches, contexts, scores
             
         except (ValueError, APIError):
             raise
@@ -608,32 +682,33 @@ class TranslationService:
         if rag and chapter_number is None:
             raise ValueError("Chapter number is required when RAG is enabled")
     
-    def _handle_rag_context(self, rag: bool, text: str, chapter_number: Optional[int]) -> Tuple[List[str], bool]:
+    def _handle_rag_context(self, rag: bool, text: str, chapter_number: Optional[int]) -> Tuple[List[str], List[float], bool]:
         """
         Handle RAG context retrieval with fallback logic.
         
         Returns:
-            Tuple of (contexts, effective_rag_status)
+            Tuple of (contexts, similarity_scores, effective_rag_status)
         """
         contexts = []
+        scores = []
         effective_rag = rag
         
         if not rag:
             logger.info("RAG disabled - using standard translation without context")
-            return contexts, False
+            return contexts, scores, False
         
         if not self.vectorstore:
             logger.warning("RAG requested but vector store not available. Proceeding without RAG.")
             logger.info("To enable RAG: 1) Run load_pdfs.py, 2) Check Azure OpenAI embedding config")
-            return contexts, False
+            return contexts, scores, False
         
         if chapter_number is None:
             logger.error("RAG enabled but chapter_number is None - this should have been caught earlier")
-            return contexts, False
+            return contexts, scores, False
         
-        # Retrieve context
+        # Retrieve context with scores
         logger.info(f"RAG enabled - retrieving context for Chapter {chapter_number}")
-        contexts = self._retrieve_context(text, chapter_number, num_contexts=DEFAULT_RAG_CONTEXTS)
+        contexts, scores = self._retrieve_context(text, chapter_number, num_contexts=DEFAULT_RAG_CONTEXTS)
         
         if contexts:
             logger.info(f"RAG context successfully retrieved: {len(contexts)} chunks")
@@ -642,18 +717,23 @@ class TranslationService:
             logger.info("Falling back to standard translation without RAG context")
             effective_rag = False
         
-        return contexts, effective_rag
+        return contexts, scores, effective_rag
     
     def _log_translation_summary(self, input_length: int, output_length: int, 
                                effective_rag: bool, context_count: int, match_count: int,
-                               requested_rag: bool, chapter_number: Optional[int]) -> None:
+                               requested_rag: bool, chapter_number: Optional[int], 
+                               similarity_scores: Optional[List[float]] = None) -> None:
         """Log detailed translation completion summary."""
         logger.info("Translation completed successfully")
         logger.info(f"Summary - Input: {input_length} chars, Output: {output_length} chars, "
                    f"RAG: {effective_rag}, Contexts: {context_count}, Dict matches: {match_count}")
         
         if effective_rag and context_count > 0:
-            logger.info(f"RAG enhanced translation completed with {context_count} context chunks from Chapter {chapter_number}")
+            score_info = ""
+            if similarity_scores and len(similarity_scores) > 0:
+                avg_score = sum(similarity_scores) / len(similarity_scores)
+                score_info = f" (avg similarity: {avg_score:.4f})"
+            logger.info(f"RAG enhanced translation completed with {context_count} context chunks from Chapter {chapter_number}{score_info}")
         elif requested_rag and not context_count:
             logger.info(f"RAG was requested but no contexts found for Chapter {chapter_number} - used standard translation")
         else:
