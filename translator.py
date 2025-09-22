@@ -59,10 +59,14 @@ class DictionaryMatcher:
                 
                 for row_num, row in enumerate(reader, start=2):
                     if len(row) >= 2 and row[0].strip() and row[1].strip():
-                        en_term = row[0].strip()
+                        en_term = row[0].strip().lower()
                         cn_term = row[1].strip()
-                        self.en_to_cn[en_term.lower()] = cn_term
-                        self.cn_to_en[cn_term] = en_term
+                        
+                        if en_term not in self.en_to_cn:
+                            self.en_to_cn[en_term] = cn_term
+                        
+                        if cn_term not in self.cn_to_en:
+                            self.cn_to_en[cn_term] = row[0].strip()
                     elif len(row) >= 2:
                         logger.debug(f"Skipping empty entry at row {row_num}: {row}")
                         
