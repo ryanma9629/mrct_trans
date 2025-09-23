@@ -1,76 +1,70 @@
 import os
+import re
 from dotenv import load_dotenv
-from langchain_chroma import Chroma
-from langchain_openai import AzureOpenAIEmbeddings
-from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+import pypdf
 
 # Load environment variables
 load_dotenv()
 
 # Define paths
 PDF_DIRECTORY = "pdf"
-CHROMA_DB_DIRECTORY = "chroma_db"
+CONTEXT_DATA_DIRECTORY = "context_data"
 
-def load_pdfs_to_chromadb():
+def clean_text(text: str) -> str:
     """
-    Loads PDFs from the specified directory, splits them into chunks,
-    and stores them in a ChromaDB vector database.
+    Performs basic text cleaning to handle PDF extraction artifacts.
+    - Replaces multiple newlines with a single space.
+    - Removes lingering hyphenation at line breaks.
     """
-    # Initialize Azure OpenAI Embeddings
-    embeddings = AzureOpenAIEmbeddings(
-        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
-        azure_deployment=os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT"),
-    )
+    # Join words broken by hyphenation and a newline
+    text = re.sub(r'(\w)-(\s*)\n(\s*)(\w)', r'\1\4', text)
+    # Replace multiple newlines/spaces with a single space
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
-    # Initialize ChromaDB
-    vectorstore = Chroma(
-        persist_directory=CHROMA_DB_DIRECTORY,
-        embedding_function=embeddings
-    )
+def extract_text_from_pdfs():
+    """
+    Loads PDFs from the specified directory, extracts their text content,
+    cleans it, and saves it to .txt files in the context_data directory.
+    """
+    if not os.path.exists(CONTEXT_DATA_DIRECTORY):
+        os.makedirs(CONTEXT_DATA_DIRECTORY)
+        print(f"Created directory: {CONTEXT_DATA_DIRECTORY}")
 
-    # Get list of PDF files
     pdf_files = [f for f in os.listdir(PDF_DIRECTORY) if f.endswith(".pdf")]
+
+    if not pdf_files:
+        print(f"No PDF files found in the '{PDF_DIRECTORY}' directory.")
+        return
 
     for pdf_file in pdf_files:
         pdf_path = os.path.join(PDF_DIRECTORY, pdf_file)
+        chapter_name = os.path.splitext(pdf_file)[0]
+        output_txt_path = os.path.join(CONTEXT_DATA_DIRECTORY, f"{chapter_name}.txt")
+        
         print(f"Processing {pdf_path}...")
 
-        # Load PDF
-        loader = PyPDFLoader(pdf_path)
-        documents = loader.load()
-        
-        # Extract chapter name from filename (e.g., "Chapter11.pdf" -> "Chapter11")
-        chapter_name = os.path.splitext(pdf_file)[0]
-        
-        # Update metadata to ensure consistent source field
-        for doc in documents:
-            doc.metadata['source'] = chapter_name
-            doc.metadata['filename'] = pdf_file
-            doc.metadata['filepath'] = pdf_path
-        
-        print(f"Updated metadata for {len(documents)} documents with source='{chapter_name}'")
+        try:
+            # Load PDF using pypdf
+            reader = pypdf.PdfReader(pdf_path)
+            
+            # Concatenate all page content
+            full_text = "".join([page.extract_text() for page in reader.pages])
+            
+            # Clean the extracted text
+            cleaned_text = clean_text(full_text)
+            
+            # Save to a text file
+            with open(output_txt_path, 'w', encoding='utf-8') as f:
+                f.write(cleaned_text)
+            
+            print(f"Successfully extracted and saved text to {output_txt_path}")
 
-        # Split text into chunks
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200
-        )
-        chunks = text_splitter.split_documents(documents)
-        
-        # Ensure chunks inherit the metadata
-        for chunk in chunks:
-            chunk.metadata['source'] = chapter_name
-            chunk.metadata['filename'] = pdf_file
-            chunk.metadata['filepath'] = pdf_path
+        except Exception as e:
+            print(f"Error processing {pdf_file}: {e}")
 
-        # Add chunks to ChromaDB
-        vectorstore.add_documents(chunks)
-        print(f"Finished processing {pdf_file} - added {len(chunks)} chunks with source='{chapter_name}'.")
-
-    print("All PDFs have been processed and stored in ChromaDB.")
+    print("\nAll PDFs have been processed.")
+    print(f"Text files are saved in the '{CONTEXT_DATA_DIRECTORY}' directory.")
 
 if __name__ == "__main__":
-    load_pdfs_to_chromadb()
+    extract_text_from_pdfs()

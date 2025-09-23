@@ -1,7 +1,9 @@
 import logging
+import re
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional, Dict, Union
 from contextlib import asynccontextmanager
+import re
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -46,7 +48,7 @@ class TranslationRequest(BaseModel):
     llm_provider: str
     api_token: str
     model: Optional[str] = None
-    rag: bool = False
+    use_context: bool = False
     chapter_number: Optional[int] = None
 
     class Config:
@@ -56,7 +58,7 @@ class TranslationRequest(BaseModel):
                 "llm_provider": "chatgpt",
                 "api_token": "your-api-token",
                 "model": "gpt-3.5-turbo",
-                "rag": False,
+                "use_context": False,
                 "chapter_number": 1
             }
         }
@@ -65,16 +67,14 @@ class TranslationRequest(BaseModel):
 class TranslationResponse(BaseModel):
     translated_text: str
     dictionary_matches: List[Tuple[str, str, int, int]]
-    retrieved_contexts: Optional[List[str]] = []
-    similarity_scores: Optional[List[float]] = []
+    context: Optional[Dict[str, Union[str, float]]] = None
     
     class Config:
         schema_extra = {
             "example": {
                 "translated_text": "你好，世界！",
                 "dictionary_matches": [["Hello", "你好", 0, 5]],
-                "retrieved_contexts": ["Context from the book..."],
-                "similarity_scores": [0.8523]
+                "context": {"text": "Context from the book...", "score": 0.95}
             }
         }
 
@@ -132,20 +132,19 @@ async def translate_text(request: TranslationRequest):
         )
     
     try:
-        translated, matches, contexts, scores = await translation_service.translate(
+        translated, matches, context = await translation_service.translate(
             request.text, 
             request.llm_provider, 
             request.api_token, 
             request.model,
-            request.rag,
+            request.use_context,
             request.chapter_number
         )
         
         return TranslationResponse(
             translated_text=translated,
             dictionary_matches=matches,
-            retrieved_contexts=contexts,
-            similarity_scores=scores
+            context=context
         )
     
     except Exception as e:
@@ -192,18 +191,27 @@ async def get_config():
         raise HTTPException(status_code=500, detail=f"Failed to get config: {str(e)}")
 
 
-@app.get("/download-dictionary")
-async def download_dictionary():
-    dict_path = Path(DICTIONARY_FILE)
-    
-    if not dict_path.exists():
-        raise HTTPException(status_code=404, detail="Dictionary file not found")
-    
-    return FileResponse(
-        path=str(dict_path),
-        filename=DICTIONARY_FILE,
-        media_type="text/csv"
-    )
+@app.get("/chapters")
+async def get_chapters():
+    """Scans the context_data directory and returns a sorted list of chapter numbers."""
+    context_path = Path("context_data")
+    if not context_path.is_dir():
+        logger.warning(f"Context data directory not found: {context_path}")
+        return []
+
+    try:
+        chapter_numbers = set()
+        for f in context_path.glob("Chapter*.txt"):
+            match = re.search(r"Chapter(\d+)\.txt", f.name)
+            if match:
+                chapter_numbers.add(int(match.group(1)))
+        
+        sorted_chapters = sorted(list(chapter_numbers))
+        logger.info(f"Found available chapters: {sorted_chapters}")
+        return sorted_chapters
+    except Exception as e:
+        logger.error(f"Failed to scan for chapters: {e}")
+        return []
 
 
 @app.get("/")

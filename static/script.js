@@ -3,6 +3,7 @@ class TranslationApp {
         this.initializeElements();
         this.bindEvents();
         this.loadConfig();
+        this.populateChapterDropdown();
     }
 
     initializeElements() {
@@ -14,9 +15,10 @@ class TranslationApp {
         this.copyBtn = document.getElementById('copy-btn');
         this.loading = document.getElementById('loading');
         this.errorMessage = document.getElementById('error-message');
-        this.ragEnabled = document.getElementById('rag-enabled');
+        this.useContextCheckbox = document.getElementById('use-context-checkbox');
         this.chapterSelection = document.getElementById('chapter-selection');
         this.chapterNumber = document.getElementById('chapter-number');
+        this.infoMessage = document.getElementById('info-message');
     }
 
     bindEvents() {
@@ -33,8 +35,43 @@ class TranslationApp {
         // Auto-fill API token when provider changes
         this.llmProvider.addEventListener('change', () => this.updateApiToken());
         
-        // RAG toggle event
-        this.ragEnabled.addEventListener('change', () => this.toggleRagControls());
+        // Context toggle event
+        this.useContextCheckbox.addEventListener('change', () => this.toggleContextControls());
+    }
+
+    async populateChapterDropdown() {
+        try {
+            const response = await fetch('/chapters');
+            if (!response.ok) {
+                throw new Error('Failed to fetch chapters');
+            }
+            const chapters = await response.json();
+            
+            if (chapters.length === 0) {
+                this.useContextCheckbox.disabled = true;
+                const label = document.querySelector('label[for="use-context-checkbox"]');
+                if (label) {
+                    label.textContent = 'Context (Not Available)';
+                    label.title = 'Run load_pdfs.py to generate context files.';
+                }
+                return;
+            }
+
+            this.chapterNumber.innerHTML = ''; // Clear existing options
+            chapters.forEach(chapter => {
+                const option = document.createElement('option');
+                option.value = chapter;
+                option.textContent = `Chapter ${chapter}`;
+                this.chapterNumber.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Failed to populate chapters:', error);
+            this.useContextCheckbox.disabled = true;
+            const label = document.querySelector('label[for="use-context-checkbox"]');
+            if (label) {
+                label.textContent = 'Context (Error)';
+            }
+        }
     }
 
     async loadConfig() {
@@ -56,16 +93,17 @@ class TranslationApp {
         }
     }
 
-    toggleRagControls() {
-        const isRagEnabled = this.ragEnabled.checked;
+    toggleContextControls() {
+        const isContextEnabled = this.useContextCheckbox.checked;
         
-        if (isRagEnabled) {
-            this.chapterSelection.style.display = 'block';
+        if (isContextEnabled) {
+            this.chapterSelection.classList.remove('hidden');
+            this.chapterNumber.disabled = false;
             this.chapterNumber.required = true;
         } else {
-            this.chapterSelection.style.display = 'none';
+            this.chapterSelection.classList.add('hidden');
+            this.chapterNumber.disabled = true;
             this.chapterNumber.required = false;
-            this.chapterNumber.value = '';
         }
     }
 
@@ -91,7 +129,7 @@ class TranslationApp {
         const text = this.inputText.value.trim();
         const provider = this.llmProvider.value;
         const token = this.apiToken.value.trim();
-        const ragEnabled = this.ragEnabled.checked;
+        const useContext = this.useContextCheckbox.checked;
         const chapterNumber = this.chapterNumber.value;
 
         if (!text) {
@@ -104,11 +142,12 @@ class TranslationApp {
             return;
         }
 
-        if (ragEnabled && !chapterNumber) {
-            this.showError('Please select a chapter number when RAG is enabled');
+        if (useContext && !chapterNumber) {
+            this.showError('Please enter a chapter number when context is enabled');
             return;
         }
 
+        this.infoMessage.classList.add('hidden');
         this.showLoading();
 
         try {
@@ -116,11 +155,11 @@ class TranslationApp {
                 text: text,
                 llm_provider: provider,
                 api_token: token,
-                rag: ragEnabled
+                use_context: useContext
             };
 
-            // Add chapter number if RAG is enabled
-            if (ragEnabled && chapterNumber) {
+            // Add chapter number if context is enabled
+            if (useContext && chapterNumber) {
                 requestBody.chapter_number = parseInt(chapterNumber);
             }
 
@@ -138,7 +177,7 @@ class TranslationApp {
             }
 
             const result = await response.json();
-            this.displayTranslation(result.translated_text, result.dictionary_matches, result.retrieved_contexts, result.similarity_scores);
+            this.displayTranslation(result.translated_text, result.dictionary_matches, result.context);
 
         } catch (error) {
             this.showError(`Translation error: ${error.message}`);
@@ -147,25 +186,15 @@ class TranslationApp {
         }
     }
 
-    displayTranslation(translatedText, dictionaryMatches, retrievedContexts, similarityScores) {
+    displayTranslation(translatedText, dictionaryMatches, context) {
         // Clear previous content
         this.outputText.innerHTML = '';
 
-        // Show RAG context information if available
-        if (retrievedContexts && retrievedContexts.length > 0) {
-            const contextInfo = document.createElement('div');
-            contextInfo.style.cssText = 'background-color: #e8f4fd; border: 1px solid #bee5eb; border-radius: 4px; padding: 10px; margin-bottom: 15px; font-size: 12px; color: #0c5460;';
-            
-            let contextMessage = `<strong>RAG Context:</strong> Found ${retrievedContexts.length} relevant context chunk(s) from the selected chapter.`;
-            
-            // Add similarity scores if available
-            if (similarityScores && similarityScores.length > 0) {
-                const avgScore = similarityScores.reduce((sum, score) => sum + score, 0) / similarityScores.length;
-                contextMessage += ` <span style="color: #495057;">(Similarity: ${(avgScore * 100).toFixed(1)}%)</span>`;
-            }
-            
-            contextInfo.innerHTML = contextMessage;
-            this.outputText.appendChild(contextInfo);
+        // Show context information if available
+        if (context && context.text) {
+            const score = (context.score * 100).toFixed(2);
+            this.infoMessage.innerHTML = `<strong>Context Retrieved:</strong> A relevant text block was found with a similarity score of <strong>${score}%</strong> and used to improve the translation.`;
+            this.infoMessage.classList.remove('hidden');
         }
 
         // Create translation text container

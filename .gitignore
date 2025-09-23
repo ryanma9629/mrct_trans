@@ -225,5 +225,5 @@ cache/
 # PDF files directory
 pdf/
 
-# ChromaDB vector database
-chroma_db/
+# Context data directory
+context_data/
