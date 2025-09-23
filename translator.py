@@ -2,14 +2,12 @@ import os
 import csv
 import re
 import logging
-from enum import Enum
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Union
-from openai import AsyncOpenAI, AsyncAzureOpenAI
-import httpx
 from dotenv import load_dotenv
 from difflib import SequenceMatcher
+
+from llm import LLMService, APIError, SupportedProvider
 
 load_dotenv()
 
@@ -22,26 +20,7 @@ CONTEXT_WINDOW_EXPAND_LENGTH = 1000
 TECHNICAL_TRANSLATION_TEMPERATURE = 0.1
 
 
-class SupportedProvider(Enum):
-    CHATGPT = "chatgpt"
-    CHATGPT_AZURE = "chatgpt(azure)"
-    DEEPSEEK = "deepseek"
-    QWEN = "qwen"
-
-
-@dataclass
-class ProviderConfig:
-    endpoint: str
-    default_model: str
-    max_tokens: int
-    timeout: Optional[float] = None
-
-
 class TranslationError(Exception):
-    pass
-
-
-class APIError(TranslationError):
     pass
 
 
@@ -121,21 +100,6 @@ class DictionaryMatcher:
 
 class TranslationService:
     
-    _PROVIDER_CONFIGS = {
-        SupportedProvider.DEEPSEEK: ProviderConfig(
-            endpoint=os.getenv("DEEPSEEK_ENDPOINT", "https://api.deepseek.com/chat/completions"),
-            default_model=os.getenv("DEEPSEEK_DEFAULT_MODEL", "deepseek-chat"),
-            max_tokens=4000,
-            timeout=60.0
-        ),
-        SupportedProvider.QWEN: ProviderConfig(
-            endpoint=os.getenv("QWEN_ENDPOINT", "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"),
-            default_model=os.getenv("QWEN_DEFAULT_MODEL", "qwen-turbo"),
-            max_tokens=2000,
-            timeout=None
-        )
-    }
-    
     def __init__(self, dictionary_file: Union[str, Path] = "QS-TB.csv", 
                  context_data_path: str = "context_data"):
         try:
@@ -143,6 +107,8 @@ class TranslationService:
         except (FileNotFoundError, TranslationError) as e:
             logger.error(f"Failed to initialize dictionary matcher: {e}")
             raise
+        
+        self.llm_service = LLMService()
         
         # Text-based context components
         self.context_data_path = context_data_path
@@ -309,137 +275,6 @@ class TranslationService:
         
         return base_prompt + dict_context
     
-    def _validate_provider(self, provider: str) -> SupportedProvider:
-        try:
-            return SupportedProvider(provider)
-        except ValueError:
-            supported_providers = [p.value for p in SupportedProvider]
-            raise ValueError(f"Unsupported LLM provider: {provider}. "
-                           f"Supported providers: {supported_providers}")
-    
-    async def _call_llm_api(self, text: str, api_token: str, is_english: bool, 
-                           dictionary_matches: Optional[List[Tuple[str, str, int, int]]], 
-                           provider: str, model: Optional[str] = None,
-                           context: Optional[str] = None) -> str:
-        provider_enum = self._validate_provider(provider)
-        system_prompt = self._prepare_system_prompt(is_english, dictionary_matches, context)
-        
-        if provider_enum in [SupportedProvider.CHATGPT, SupportedProvider.CHATGPT_AZURE]:
-            is_azure = provider_enum == SupportedProvider.CHATGPT_AZURE
-            return await self._call_openai_api(text, api_token, system_prompt, is_azure, model)
-        else:
-            return await self._call_http_api(text, api_token, system_prompt, provider_enum, model)
-    
-    async def _call_openai_api(self, text: str, api_token: str, system_prompt: str, 
-                              is_azure: bool, model: Optional[str]) -> str:
-        try:
-            if is_azure:
-                azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-                if not azure_endpoint:
-                    raise APIError("AZURE_OPENAI_ENDPOINT not configured")
-                
-                client = AsyncAzureOpenAI(
-                    api_key=api_token,
-                    azure_endpoint=azure_endpoint,
-                    api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2023-12-01-preview")
-                )
-                default_model = os.getenv("AZURE_OPENAI_DEFAULT_MODEL", "gpt-4o-mini")
-                selected_model = model if model else default_model
-                
-                response = await client.chat.completions.create(
-                    model=selected_model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Translate: {text}"}
-                    ],
-                    temperature=TECHNICAL_TRANSLATION_TEMPERATURE
-                )
-            else:
-                client = AsyncOpenAI(api_key=api_token)
-                default_model = os.getenv("OPENAI_DEFAULT_MODEL", "gpt-4o-mini")
-                selected_model = model if model else default_model
-                
-                response = await client.chat.completions.create(
-                    model=selected_model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Translate: {text}"}
-                    ],
-                    temperature=TECHNICAL_TRANSLATION_TEMPERATURE
-                )
-            
-            if not response.choices or not response.choices[0].message.content:
-                raise APIError("Empty response from OpenAI API")
-                
-            return response.choices[0].message.content.strip()
-            
-        except Exception as e:
-            provider_name = "Azure OpenAI" if is_azure else "OpenAI"
-            if isinstance(e, APIError):
-                raise
-            raise APIError(f"{provider_name} API error: {e}")
-    
-    async def _call_http_api(self, text: str, api_token: str, system_prompt: str, 
-                            provider: SupportedProvider, model: Optional[str]) -> str:
-        if provider not in self._PROVIDER_CONFIGS:
-            raise ValueError(f"Unsupported HTTP provider: {provider}")
-        
-        config = self._PROVIDER_CONFIGS[provider]
-        selected_model = model if model else config.default_model
-        
-        request_data = {
-            "model": selected_model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Translate: {text}"}
-            ],
-            "max_tokens": min(config.max_tokens + 1000, 6000),
-            "temperature": TECHNICAL_TRANSLATION_TEMPERATURE
-        }
-        
-        headers = {
-            "Authorization": f"Bearer {api_token}",
-            "Content-Type": "application/json"
-        }
-        
-        try:
-            if config.timeout:
-                async with httpx.AsyncClient(timeout=config.timeout) as client:
-                    response = await client.post(config.endpoint, headers=headers, json=request_data)
-            else:
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(config.endpoint, headers=headers, json=request_data)
-            
-            if response.status_code != 200:
-                await self._handle_http_error(response, provider)
-            
-            result = response.json()
-            
-            if not result.get("choices") or not result["choices"][0].get("message", {}).get("content"):
-                raise APIError(f"Empty response from {provider.value} API")
-                
-            return result["choices"][0]["message"]["content"].strip()
-            
-        except httpx.RequestError as e:
-            raise APIError(f"Network error calling {provider.value} API: {e}")
-        except Exception as e:
-            if isinstance(e, APIError):
-                raise
-            raise APIError(f"{provider.value} API error: {e}")
-    
-    async def _handle_http_error(self, response: httpx.Response, provider: SupportedProvider) -> None:
-        error_detail = f"{provider.value} API error: {response.status_code}"
-        
-        try:
-            error_body = response.json()
-            if "error" in error_body:
-                error_message = error_body["error"].get("message", "Unknown error")
-                error_detail += f" - {error_message}"
-        except Exception:
-            error_detail += f" - Response: {response.text[:200]}"
-        
-        raise APIError(error_detail)
-    
     async def translate(self, text: str, llm_provider: str, api_token: str, 
                        model: Optional[str] = None, use_context: bool = False,
                        chapter_number: Optional[int] = None) -> Tuple[str, List[Tuple[str, str, int, int]], Optional[Dict[str, Union[str, float]]]]:
@@ -497,8 +332,14 @@ class TranslationService:
                        f"matches={len(matches)}")
             
             # Perform translation
-            translated = await self._call_llm_api(
-                text, api_token, is_english, matches, llm_provider, model, context_text
+            system_prompt = self._prepare_system_prompt(is_english, matches, context_text)
+            translated = await self.llm_service.call_llm_api(
+                text=text,
+                system_prompt=system_prompt,
+                provider=llm_provider,
+                api_token=api_token,
+                model=model,
+                temperature=TECHNICAL_TRANSLATION_TEMPERATURE
             )
             
             if not translated.strip():
