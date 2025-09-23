@@ -1,138 +1,133 @@
 # API Key Application Guide
 
-This document provides instructions on how to obtain API keys for Alibaba Qwen and DeepSeek for use with the MRCT BOOK Translator tool.
+This document provides instructions on how to obtain API keys for Alibaba Qwen, DeepSeek, OpenAI (ChatGPT), and Azure OpenAI for use with the MRCT BOOK Translator tool.
+
+---
 
 ## Alibaba Qwen API Key Application
 
 ### Step 1: Register Alibaba Cloud Account
-1. Visit Alibaba Cloud website: https://www.aliyun.com/
-2. Click "Register" button in the top right corner
-3. Fill in phone number, verification code, password and complete registration
-4. Complete real-name verification (ID required)
+1. Visit the Alibaba Cloud website: https://www.aliyun.com/
+2. Register for an account and complete the real-name verification.
 
-### Step 2: Activate Model Studio Service
-1. Log into Alibaba Cloud console
-2. Search for "Model Studio" or visit: https://bailian.console.aliyun.com/
-3. Click "Activate Now"
-4. Read and agree to the service agreement
+### Step 2: Activate Model Studio (Bailian)
+1. Log into the Alibaba Cloud console and search for "Model Studio" (灵积模型服务).
+2. Visit the Model Studio console: https://bailian.console.aliyun.com/
+3. Activate the service and agree to the terms.
 
 ### Step 3: Get API Key
-1. Enter Model Studio console
-2. Click "API Key Management" in the left navigation
-3. Click "Create New API Key"
-4. Set API Key name and description
-5. Copy the generated API Key (format: sk-xxxxxxxxxx)
-
-### Step 4: Configure Billing and Limits
-1. Recharge your account in the console (recommend small amount for testing)
-2. Set consumption limits to avoid unexpected charges
-3. Check model pricing: https://help.aliyun.com/zh/model-studio/getting-started/models
+1. In the Model Studio console, navigate to "API Key Management".
+2. Click "Create New API Key" and copy the generated key (format: `sk-xxxxxxxxxx`).
 
 ### Usage Information
 - **Environment Variable**: `DASHSCOPE_API_KEY`
 - **Default Model**: `qwen-turbo`
-- **API Endpoint**: `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions`
-- **Documentation**: https://help.aliyun.com/zh/model-studio/use-qwen-by-calling-api
+- **Documentation**: https://help.aliyun.com/zh/model-studio/
 
 ---
 
 ## DeepSeek API Key Application
 
 ### Step 1: Register DeepSeek Account
-1. Visit DeepSeek website: https://www.deepseek.com/
-2. Click "Sign Up" in the top right corner
-3. Register with email or login with GitHub
-4. Verify email address
+1. Visit the DeepSeek platform: https://platform.deepseek.com/
+2. Sign up with your email or a GitHub account.
 
-### Step 2: Apply for API Access
-1. After login, visit: https://platform.deepseek.com/
-2. Complete personal information
-3. Wait for approval (usually 1-2 business days)
-
-### Step 3: Get API Key
-1. After approval, login to platform
-2. Go to "API Keys" page
-3. Click "Create new secret key"
-4. Set key name and permissions
-5. Copy the generated API Key (save it safely, shown only once)
-
-### Step 4: Billing and Configuration
-1. Go to "Billing" page to add credits
-2. Choose appropriate recharge amount
-3. Set usage limits and monitoring
+### Step 2: Get API Key
+1. After logging in, go to the "API Keys" page.
+2. Click "Create new secret key" and copy the generated API Key.
 
 ### Usage Information
 - **Environment Variable**: `DEEPSEEK_API_KEY`
 - **Default Model**: `deepseek-chat`
-- **API Endpoint**: `https://api.deepseek.com/chat/completions`
-- **Documentation**: https://api-docs.deepseek.com/
+- **Documentation**: https://platform.deepseek.com/docs
+
+---
+
+## OpenAI (ChatGPT) API Key Application
+
+### Step 1: Register OpenAI Account
+1. Visit the OpenAI Platform: https://platform.openai.com/
+2. Sign up for a new account and verify your email.
+
+### Step 2: Get API Key
+1. Navigate to the "API keys" section in your account dashboard.
+2. Click "Create new secret key" and copy the generated key.
+
+### Step 3: Set Up Billing
+1. Go to the "Billing" section and add a payment method. A paid plan is required to access newer models and higher rate limits.
+
+### Usage Information
+- **Environment Variable**: `OPENAI_API_KEY`
+- **Default Model**: `gpt-4o-mini`
+- **Documentation**: https://platform.openai.com/docs
+
+---
+
+## Azure OpenAI API Key Application
+
+### Step 1: Apply for Azure OpenAI Access
+1. You need an Azure subscription. If you don't have one, create one at https://azure.microsoft.com/.
+2. Apply for access to the Azure OpenAI Service by filling out the request form. Access is currently limited.
+
+### Step 2: Create and Deploy an OpenAI Resource
+1. Once approved, create an "Azure OpenAI" resource in the Azure portal.
+2. In your resource, go to "Model deployments" and deploy a model (e.g., `gpt-4o-mini`). You must give your deployment a unique name.
+
+### Step 3: Get API Key and Endpoint
+1. Navigate to the "Keys and Endpoint" section of your Azure OpenAI resource.
+2. Copy the **API Key** and the **Endpoint URL**.
+
+### Usage Information
+- **Environment Variables**:
+  - `AZURE_OPENAI_API_KEY`: Your API key.
+  - `AZURE_OPENAI_ENDPOINT`: Your endpoint URL.
+- **Model**: The **deployment name** you created in Step 2.
 
 ---
 
 ## Configuration Recommendations
 
 ### Environment Variable Setup
-Create a `.env` file in the project root:
+Create a `.env` file in the project root with the following format:
 ```bash
 # Qwen API Configuration
-DASHSCOPE_API_KEY=sk-your_dashscope_api_key_here
-QWEN_DEFAULT_MODEL=qwen-turbo
+DASHSCOPE_API_KEY=sk-your_qwen_api_key
 
-# DeepSeek API Configuration  
-DEEPSEEK_API_KEY=your_deepseek_api_key_here
-DEEPSEEK_DEFAULT_MODEL=deepseek-chat
+# DeepSeek API Configuration
+DEEPSEEK_API_KEY=your_deepseek_api_key
+
+# OpenAI (ChatGPT) API Configuration
+OPENAI_API_KEY=your_openai_api_key
+
+# Azure OpenAI API Configuration
+AZURE_OPENAI_API_KEY=your_azure_api_key
+AZURE_OPENAI_ENDPOINT=https://your-azure-endpoint.openai.azure.com/
 ```
 
 ### Security Notes
-1. **Never expose API Keys**: Don't commit API keys to code repositories
-2. **Regular rotation**: Recommend changing API keys periodically
-3. **Monitor usage**: Set reasonable usage limits and alerts
-4. **Minimal permissions**: Only grant necessary API permissions
+- **Never expose API Keys**: Do not commit your `.env` file or keys to public repositories.
+- **Monitor Usage**: Set reasonable usage limits and alerts in your provider's dashboard.
+- **Minimal Permissions**: Grant only the necessary permissions for your API keys.
 
-### Cost Control Recommendations
-1. **Qwen**:
-   - Input Tokens: $0.56/1M tokens
-   - Output Tokens: $1.68/1M tokens
-   - Recommendation: Start with small recharge (¥10-50) for testing
-
-2. **DeepSeek**:
-   - Relatively low cost, suitable for heavy usage
-   - Recommendation: Start with $5-10 for testing
-
-### Troubleshooting
-If you encounter these issues:
-
-**Invalid API Key**
-- Check if key is correctly copied
-- Confirm service is activated
-- Check account balance
-
-**Request Rejected**
-- Check if API quota is exhausted
-- Verify request format is correct
-- Check service status page
-
-**Network Connection Issues**
-- Check network connection
-- Try using VPN (may be needed in some regions)
-- Check firewall settings
+### Cost Control
+- **Start Small**: Begin with a small credit or low spending limit for testing.
+- **Check Pricing**: Review the pricing for each model on the respective provider's website, as costs can vary significantly.
+- **Qwen & DeepSeek**: Generally more cost-effective, especially for Chinese translations.
+- **OpenAI & Azure**: Typically more expensive but offer high-quality models.
 
 ---
 
-## Technical Support
+## Troubleshooting
 
-### Alibaba Qwen
-- Official Documentation: https://help.aliyun.com/zh/model-studio/
-- Technical Support: Through Alibaba Cloud ticket system
-- Community Forum: https://developer.aliyun.com/
-
-### DeepSeek  
-- Official Documentation: https://api-docs.deepseek.com/
-- Email Support: api-service@deepseek.com
-- Discord Community: https://discord.gg/Tc7c45Zzu5
+If you encounter an **Invalid API Key** error:
+- Ensure the key is copied correctly.
+- Confirm the corresponding service is activated and has a valid payment method.
+- Check your account balance or spending limits.
+- For Azure, ensure you are using the correct endpoint and deployment name.
 
 ---
 
 ## Update Log
-- 2025-01-20: Document created
-- Document Version: v1.0
+- 2025-09-23: Added guides for OpenAI and Azure OpenAI. Updated structure.
+- 2025-09-20: Document created.
+- Document Version: v2.0
