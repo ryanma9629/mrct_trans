@@ -1,6 +1,6 @@
 # MRCT BOOK Translator
 
-**A powerful web-based English ⇄ Chinese translation tool with technical dictionary support**
+**A powerful web-based English ⇄ Chinese translation tool with technical dictionary support and RAG-enhanced context-aware translation**
 
 ![Language](https://img.shields.io/badge/Language-Python-blue)
 ![Framework](https://img.shields.io/badge/Framework-FastAPI-green)
@@ -9,274 +9,127 @@
 
 ## Features
 
-- **Bidirectional Translation**: Seamlessly translate between English and Chinese
+- **Bidirectional Translation**: Seamlessly translate between English and Chinese with automatic language detection
 - **Multiple AI Providers**: Support for Qwen, DeepSeek, ChatGPT, and Azure OpenAI
-- **Technical Dictionary**: Built-in QS-TB.csv dictionary with 2,700+ technical terms
-- **Smart Language Detection**: Automatically detects input language
-- **Context-Aware Translation**: Uses dictionary terms for accurate technical translations
-- **Modern Web Interface**: Clean, responsive design for easy use
-- **Real-time Translation**: Fast API responses with loading indicators
+- **Technical Dictionary**: Built-in [`QS-TB.csv`](QS-TB.csv) dictionary with 2,700+ technical terms
+- **RAG-Enhanced Translation**: Context-aware translation using book chapters and PDF content
+- **Smart Context Retrieval**: Automatic similarity-based context matching for improved accuracy
+- **PDF Processing**: Extract and process context from PDF files using [`load_pdfs.py`](load_pdfs.py)
+- **Dictionary Highlighting**: Visual highlighting of translated technical terms
+- **Modern Web Interface**: Clean, responsive design with real-time context feedback
+- **Real-time Translation**: Fast API responses with loading indicators and similarity scores
 - **Copy to Clipboard**: One-click copying of translation results
 - **Privacy-First**: All processing runs locally on your machine
 
-## Supported AI Providers
+## Installation
 
-| Provider | Model | Strengths | Cost |
-|----------|-------|-----------|------|
-| **Alibaba Qwen** | qwen-turbo | Best for Chinese translations | Low |
-| **DeepSeek** | deepseek-chat | Cost-effective, good quality | Very Low |
-| **OpenAI ChatGPT** | gpt-4o-mini | Most reliable, high quality | Medium |
-| **Azure OpenAI** | gpt-4o-mini | Enterprise-grade reliability | Medium |
+### Windows Installation
+```cmd
+# 1. Clone the project
+git clone https://github.com/ryanma9629/mrct_trans.git
+cd mrct_trans
 
-## Quick Start
+# 2. Create and activate virtual environment
+python -m venv venv
+venv\Scripts\activate
 
-### Prerequisites
-- Python 3.8 or higher
-- Internet connection for AI API calls
+# 3. Install dependencies
+pip install -r requirements.txt
 
-### Installation
+# 4. Create configuration file
+copy .env.example .env
+```
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/ryanma9629/mrct_trans.git
-   cd mrct_trans
-   ```
+### macOS & Linux Installation
+```bash
+# 1. Clone the project
+git clone https://github.com/ryanma9629/mrct_trans.git
+cd mrct_trans
 
-2. **Create virtual environment** (recommended)
-   ```bash
-   python -m venv venv
-   
-   # Windows
-   venv\Scripts\activate
-   
-   # macOS/Linux
-   source venv/bin/activate
-   ```
+# 2. Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
 
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+# 3. Install dependencies
+pip install -r requirements.txt
 
-4. **Configure API keys**
-   ```bash
-   # Copy environment template
-   cp .env.example .env
-   
-   # Edit .env file and add your API keys
-   DASHSCOPE_API_KEY=sk-your_qwen_key_here
-   DEEPSEEK_API_KEY=your_deepseek_key_here
-   ```
-
-5. **Run the application**
-   ```bash
-   python main.py
-   ```
-
-6. **Open in browser**
-   
-   Navigate to `http://localhost:8099`
+# 4. Create configuration file
+cp .env.example .env
+```
 
 ## Configuration
 
-### API Keys Setup
-
-See [API_KEY_Application_Guide.md](API_KEY_Application_Guide.md) for detailed instructions on obtaining API keys.
-
-**Quick setup in `.env` file:**
+### 1. API Keys Setup
+Edit the `.env` file and add your API keys. See [`API_KEY_Application_Guide.md`](API_KEY_Application_Guide.md) for details.
 ```bash
-# Qwen (Recommended for Chinese)
-DASHSCOPE_API_KEY=sk-your_dashscope_key
+# Qwen (Recommended for Chinese translations)
+DASHSCOPE_API_KEY=sk-your_dashscope_key_here
 
-# DeepSeek (Cost-effective)
-DEEPSEEK_API_KEY=your_deepseek_key
+# DeepSeek (Cost-effective option)
+DEEPSEEK_API_KEY=sk-your_deepseek_key_here
 
-# OpenAI (Optional)
-OPENAI_API_KEY=your_openai_key
+# OpenAI ChatGPT (Optional)
+OPENAI_API_KEY=your_openai_api_key_here
 
 # Azure OpenAI (Optional)
 AZURE_OPENAI_API_KEY=your_azure_key
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 ```
 
-### Technical Dictionary
+### 2. RAG Context Setup (Optional)
+For enhanced context-aware translation:
+1.  Create a `pdf/` directory and place your PDF files inside.
+2.  Run the processing script: `python load_pdfs.py`
 
-The included `QS-TB.csv` file contains over 2,700 technical terms for accurate translation of:
-- Statistical terms
-- Medical research terminology
-- Scientific vocabulary
-- Clinical trial terminology
-
-Download and customize the dictionary as needed for your specific domain.
+This will create context data in the `context_data/` directory, enabling RAG-enhanced translation.
 
 ## Usage
 
-### Web Interface
+### Starting the Application
+```bash
+# Start the server (use python3 on macOS/Linux if needed)
+python main.py
+```
+The application will be available at `http://localhost:8099`.
 
-1. **Select AI Provider**: Choose your preferred LLM provider
-2. **Enter API Token**: Paste your API key (auto-filled if configured)
-3. **Input Text**: Type or paste text to translate
-4. **Translate**: Click translate button or press Ctrl+Enter
-5. **Copy Result**: Use the copy button to get translated text
+### Using the Web Interface
+1.  **Select LLM Provider**: Choose your preferred AI provider and model.
+2.  **Enter API Token**: Provide your API key.
+3.  **Configure RAG** (Optional): Enable "Retrieve context" and select a chapter.
+4.  **Translate**: Enter text and click "Translate" or press `Ctrl+Enter`.
 
-### Language Detection
+## API Reference
 
-The app automatically detects input language:
-- **English text** → Translates to Chinese
-- **Chinese text** → Translates to English  
-- **Mixed text** → Translates to English
-
-### API Endpoints
-
-The application provides REST API endpoints for programmatic access:
-
-```python
-# Translation endpoint
-POST /translate
+### Translation Endpoint
+`POST /translate`
+```json
 {
   "text": "Hello world",
   "llm_provider": "qwen",
   "api_token": "your-token",
-  "model": "qwen-turbo"
+  "model": "qwen-turbo",
+  "use_context": true,
+  "chapter_number": 1
 }
-
-# Configuration endpoint
-GET /config
-
-# Dictionary download
-GET /download-dictionary
 ```
 
-### Translation Service API
-
-You can also use the translation service directly in Python:
-
-```python
-from translator import TranslationService
-
-# Initialize service
-service = TranslationService()
-
-# Translate text
-translated_text, matches = await service.translate(
-    text="Hello world",
-    llm_provider="qwen",
-    api_token="your-token",
-    model="qwen-turbo"
-)
-
-# Get configuration
-config = service.get_config()
-```
+### Other Endpoints
+-   `GET /config`: Get application configuration.
+-   `GET /chapters`: Get a list of available context chapters.
+-   `GET /health`: Check the health status of the service.
 
 ## Project Structure
-
 ```
 mrct_trans/
-├── main.py                     # FastAPI web server and API endpoints
-├── translator.py               # Translation service core logic
-├── static/                     # Frontend files
-│   ├── index.html             # Web interface
-│   ├── style.css              # Styling
-│   └── script.js              # JavaScript logic
-├── QS-TB.csv                  # Technical dictionary (2,700+ terms)
-├── requirements.txt           # Python dependencies
-├── .env.example              # Environment template
-├── README.md                 # This file
-├── INSTALLATION.md           # Detailed setup guide
-└── API_KEY_Application_Guide.md # API key instructions
+├── main.py                      # FastAPI web server and API endpoints
+├── translator.py                # Translation service core logic with RAG
+├── llm.py                       # LLM provider integrations
+├── load_pdfs.py                 # PDF processing for RAG context
+├── static/                      # Web frontend files (HTML, CSS, JS)
+├── pdf/                         # Source PDF files for context
+├── context_data/                # Processed text files (auto-generated)
+├── QS-TB.csv                    # Technical dictionary
+├── .env                         # Local configuration file
+├── requirements.txt             # Python dependencies
+└── README.md                    # This file
 ```
-
-## Architecture
-
-The application follows a clean architecture pattern with separation of concerns:
-
-- **`main.py`**: FastAPI web framework handling HTTP requests and responses
-- **`translator.py`**: Core translation service containing:
-  - `TranslationService`: Main service class coordinating all translation operations
-  - `DictionaryMatcher`: Technical dictionary lookup and context preparation
-  - LLM provider integrations (ChatGPT, Azure OpenAI, DeepSeek, Qwen)
-  - Language detection and text processing
-- **`static/`**: Frontend web interface for user interaction
-
-## Security & Privacy
-
-- **Local Processing**: All operations run on your machine
-- **No Data Collection**: No user data is stored or transmitted
-- **API Key Protection**: Keys stored locally in `.env` file
-- **Direct API Calls**: Translation requests go directly to chosen AI provider
-- **Keep Keys Secure**: Never commit `.env` file to version control
-
-## Troubleshooting
-
-### Common Issues
-
-**"Module not found" error**
-```bash
-# Make sure you're in the virtual environment
-pip install -r requirements.txt
-```
-
-**API key errors**
-- Verify your API key is correctly copied
-- Check that the AI service is activated
-- Ensure sufficient account balance
-
-**Port 8099 in use**
-```bash
-# Change port in main.py or kill existing process
-# Windows: netstat -ano | findstr :8099
-# Linux/Mac: lsof -i :8099
-```
-
-**Translation failures**
-- Check internet connection
-- Verify API provider status
-- Try a different AI provider
-
-### Getting Help
-
-1. Check [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions
-2. Review [API_KEY_Application_Guide.md](API_KEY_Application_Guide.md) for API setup
-3. Open an issue on GitHub with error details and system info
-
-## Contributing
-
-Contributions are welcome! Areas for improvement:
-- Additional AI provider integrations
-- Enhanced dictionary management
-- UI/UX improvements
-- Translation quality optimizations
-- Docker containerization
-
-## Performance
-
-- **Translation Speed**: ~1-3 seconds depending on provider
-- **Dictionary Size**: 2,700+ technical terms
-- **Memory Usage**: ~50MB typical
-- **Supported Text Length**: Up to 4,000 tokens per request
-
-## Roadmap
-
-- [ ] Batch translation support
-- [ ] Translation history
-- [ ] Custom dictionary management
-- [ ] Offline translation option
-- [ ] Mobile-responsive improvements
-- [ ] Translation quality metrics
-
-## License
-
-This project is for educational and research purposes. Please check individual AI provider terms of service for commercial usage restrictions.
-
-## Acknowledgments
-
-- Technical dictionary sourced from QS-TB terminology database
-- Built with FastAPI and modern web technologies
-- Supports multiple leading AI translation services
-
----
-
-**Made with care for accurate English ⇄ Chinese translation**
-
-*For technical support or questions, please refer to the documentation or open an issue.*
