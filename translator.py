@@ -369,10 +369,10 @@ class TranslationService:
         return {
             "supported_providers": [provider.value for provider in SupportedProvider],
             "default_models": {
-                SupportedProvider.CHATGPT.value: os.getenv("OPENAI_DEFAULT_MODEL", "gpt-4o-mini"),
-                SupportedProvider.CHATGPT_AZURE.value: os.getenv("AZURE_OPENAI_DEFAULT_MODEL", "gpt-4o-mini"),
-                SupportedProvider.DEEPSEEK.value: os.getenv("DEEPSEEK_DEFAULT_MODEL", "deepseek-chat"),
-                SupportedProvider.QWEN.value: os.getenv("QWEN_DEFAULT_MODEL", "qwen-turbo")
+                SupportedProvider.CHATGPT.value: "gpt-4o-mini",
+                SupportedProvider.CHATGPT_AZURE.value: "gpt-4o-mini",
+                SupportedProvider.DEEPSEEK.value: "deepseek-chat",
+                SupportedProvider.QWEN.value: "qwen-turbo"
             },
             "default_tokens": {
                 SupportedProvider.CHATGPT.value: os.getenv("OPENAI_API_KEY", ""),

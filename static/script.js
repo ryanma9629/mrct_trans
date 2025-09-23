@@ -4,10 +4,12 @@ class TranslationApp {
         this.bindEvents();
         this.loadConfig();
         this.populateChapterDropdown();
+        this.updateModelOptions(); // Initialize model options
     }
 
     initializeElements() {
         this.llmProvider = document.getElementById('llm-provider');
+        this.modelSelect = document.getElementById('model-select');
         this.apiToken = document.getElementById('api-token');
         this.inputText = document.getElementById('input-text');
         this.outputText = document.getElementById('output-text');
@@ -19,6 +21,26 @@ class TranslationApp {
         this.chapterSelection = document.getElementById('chapter-selection');
         this.chapterNumber = document.getElementById('chapter-number');
         this.infoMessage = document.getElementById('info-message');
+        
+        // Model options for each provider
+        this.modelOptions = {
+            'qwen': [
+                { value: 'qwen-turbo', text: 'qwen-turbo' },
+                { value: 'qwen-plus', text: 'qwen-plus' },
+                { value: 'qwen-max', text: 'qwen-max' }
+            ],
+            'deepseek': [
+                { value: 'deepseek-chat', text: 'deepseek-chat' }
+            ],
+            'chatgpt': [
+                { value: 'gpt-4o-mini', text: 'gpt-4o-mini' },
+                { value: 'gpt-4o', text: 'gpt-4o' }
+            ],
+            'chatgpt(azure)': [
+                { value: 'gpt-4o-mini', text: 'gpt-4o-mini' },
+                { value: 'gpt-4o', text: 'gpt-4o' }
+            ]
+        };
     }
 
     bindEvents() {
@@ -33,7 +55,10 @@ class TranslationApp {
         });
 
         // Auto-fill API token when provider changes
-        this.llmProvider.addEventListener('change', () => this.updateApiToken());
+        this.llmProvider.addEventListener('change', () => {
+            this.updateApiToken();
+            this.updateModelOptions();
+        });
         
         // Context toggle event
         this.useContextCheckbox.addEventListener('change', () => this.toggleContextControls());
@@ -93,6 +118,27 @@ class TranslationApp {
         }
     }
 
+    updateModelOptions() {
+        const provider = this.llmProvider.value;
+        const options = this.modelOptions[provider] || [];
+        
+        // Clear existing options
+        this.modelSelect.innerHTML = '';
+        
+        // Add new options
+        options.forEach(option => {
+            const optionElement = document.createElement('option');
+            optionElement.value = option.value;
+            optionElement.textContent = option.text;
+            this.modelSelect.appendChild(optionElement);
+        });
+        
+        // Select the first option by default (which should be the default model)
+        if (options.length > 0) {
+            this.modelSelect.value = options[0].value;
+        }
+    }
+
     toggleContextControls() {
         const isContextEnabled = this.useContextCheckbox.checked;
         
@@ -128,6 +174,7 @@ class TranslationApp {
     async translate() {
         const text = this.inputText.value.trim();
         const provider = this.llmProvider.value;
+        const model = this.modelSelect.value;
         const token = this.apiToken.value.trim();
         const useContext = this.useContextCheckbox.checked;
         const chapterNumber = this.chapterNumber.value;
@@ -157,6 +204,11 @@ class TranslationApp {
                 api_token: token,
                 use_context: useContext
             };
+
+            // Add model if selected
+            if (model) {
+                requestBody.model = model;
+            }
 
             // Add chapter number if context is enabled
             if (useContext && chapterNumber) {
