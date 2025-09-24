@@ -429,3 +429,36 @@ class TranslationService:
                 SupportedProvider.QWEN.value: os.getenv("DASHSCOPE_API_KEY", "")
             }
         }
+
+    async def translate_stream(self, text: str, llm_provider: str, api_token: str,
+                             model: Optional[str] = None, use_context: bool = False,
+                             chapter_number: Optional[int] = None):
+        """Stream translation text with optional context enhancement."""
+        self._validate_translation_inputs(text, api_token, use_context, chapter_number)
+
+        try:
+            # Prepare translation components
+            is_english = self.detect_language(text)
+            matches = self.dictionary_matcher.find_matches(text, is_english)
+            context_info = self._retrieve_context_if_requested(text, use_context, chapter_number)
+
+            # Prepare system prompt
+            context_text = context_info['text'] if context_info else None
+            system_prompt = self._prepare_system_prompt(is_english, matches, context_text)
+
+            # Stream translation
+            async for chunk in self.llm_service.call_llm_api_stream(
+                text=text,
+                system_prompt=system_prompt,
+                provider=llm_provider,
+                api_token=api_token,
+                model=model,
+                temperature=TECHNICAL_TRANSLATION_TEMPERATURE
+            ):
+                yield chunk
+
+        except (ValueError, APIError):
+            raise
+        except Exception as e:
+            logger.error(f"Streaming translation failed: {e}")
+            raise TranslationError(f"Streaming translation failed: {e}")

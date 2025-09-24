@@ -400,6 +400,28 @@ input:checked + .slider:before {
     display: none;
 }
 
+/* Streaming and context controls */
+.context-controls, .streaming-controls {
+    margin-bottom: 15px;
+}
+
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.checkbox-group input[type="checkbox"] {
+    margin: 0;
+}
+
+.checkbox-group label {
+    font-size: 14px;
+    margin: 0;
+    cursor: pointer;
+}
+
 /* Context information above translation label */
 .context-info-output {
     background-color: #e8f5e8;
@@ -414,6 +436,25 @@ input:checked + .slider:before {
     color: #2e7d32;
     margin: 0;
     line-height: 1.4;
+}
+
+/* Streaming translation styles */
+.streaming-container {
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.streaming-cursor {
+    color: #3498db;
+    animation: blink 1s infinite;
+    font-weight: bold;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
 }
 
 /* Translation History Styles */

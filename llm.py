@@ -131,3 +131,43 @@ class LLMService:
             raise APIError(f"Empty response from {provider_enum.value} API")
 
         return response.choices[0].message.content.strip()
+
+    async def call_llm_api_stream(
+        self,
+        text: str,
+        system_prompt: str,
+        provider: str,
+        api_token: str,
+        model: Optional[str] = None,
+        temperature: float = 0.1,
+    ):
+        """Call the specified LLM provider API for streaming translation."""
+        provider_enum = self._validate_provider(provider)
+        client = self._get_llm_client(provider_enum, api_token)
+        selected_model = self._get_model_for_provider(provider_enum, model)
+
+        try:
+            response = await self._make_streaming_api_call(
+                client, selected_model, system_prompt, text, temperature
+            )
+
+            async for chunk in response:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+
+        except Exception as e:
+            if isinstance(e, APIError):
+                raise
+            raise APIError(f"{provider_enum.value} streaming API error: {e}")
+
+    async def _make_streaming_api_call(self, client, model: str, system_prompt: str, text: str, temperature: float):
+        """Make a streaming API call to the LLM provider."""
+        return await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Translate: {text}"},
+            ],
+            temperature=temperature,
+            stream=True
+        )

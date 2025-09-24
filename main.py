@@ -8,10 +8,11 @@ from collections import deque
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
+import json
 
 from translator import TranslationService
 
@@ -54,6 +55,7 @@ class TranslationRequest(BaseModel):
     model: Optional[str] = None
     use_context: bool = False
     chapter_number: Optional[int] = None
+    stream: bool = False
 
     class Config:
         schema_extra = {
@@ -63,7 +65,8 @@ class TranslationRequest(BaseModel):
                 "api_token": "your-api-token",
                 "model": "gpt-3.5-turbo",
                 "use_context": False,
-                "chapter_number": 1
+                "chapter_number": 1,
+                "stream": False
             }
         }
 
@@ -252,6 +255,91 @@ async def translate_text(request: TranslationRequest):
     except Exception as e:
         logger.error(f"Translation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Translation failed: {str(e)}")
+
+
+@app.post("/translate-stream")
+async def translate_text_stream(request: TranslationRequest):
+    """Stream translation results in real-time."""
+    _validate_translation_service()
+
+    if not request.stream:
+        raise HTTPException(status_code=400, detail="Streaming must be enabled for this endpoint")
+
+    async def generate_translation_stream():
+        complete_translation = ""
+        try:
+            # Prepare translation components
+            is_english = translation_service.detect_language(request.text)
+            matches = translation_service.dictionary_matcher.find_matches(request.text, is_english)
+
+            # Send initial metadata
+            metadata = {
+                "type": "metadata",
+                "source_language": "en" if is_english else "zh",
+                "target_language": "zh" if is_english else "en",
+                "dictionary_matches": matches,
+                "use_context": request.use_context
+            }
+            yield f"data: {json.dumps(metadata)}\n\n"
+
+            # Handle context retrieval if needed
+            context_info = None
+            if request.use_context and request.chapter_number:
+                if translation_service.context_enabled:
+                    context_result = translation_service._retrieve_text_context(request.text, request.chapter_number)
+                    if context_result:
+                        context, similarity = context_result
+                        context_info = {"text": context, "score": similarity}
+
+                        context_data = {
+                            "type": "context",
+                            "context": context_info
+                        }
+                        yield f"data: {json.dumps(context_data)}\n\n"
+
+            # Perform streaming translation and accumulate complete text
+            async for chunk in translation_service.translate_stream(
+                request.text,
+                request.llm_provider,
+                request.api_token,
+                request.model,
+                request.use_context,
+                request.chapter_number
+            ):
+                complete_translation += chunk
+                chunk_data = {
+                    "type": "chunk",
+                    "content": chunk
+                }
+                yield f"data: {json.dumps(chunk_data)}\n\n"
+
+            # Store complete translation in history
+            _store_translation_history(request, complete_translation, matches, context_info)
+
+            # Send completion signal
+            completion_data = {
+                "type": "complete",
+                "dictionary_matches": matches,
+                "context": context_info
+            }
+            yield f"data: {json.dumps(completion_data)}\n\n"
+
+        except Exception as e:
+            error_data = {
+                "type": "error",
+                "message": str(e)
+            }
+            yield f"data: {json.dumps(error_data)}\n\n"
+
+    return StreamingResponse(
+        generate_translation_stream(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering
+        }
+    )
 
 
 @app.get("/config", response_model=ConfigResponse)

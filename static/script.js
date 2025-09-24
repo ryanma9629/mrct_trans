@@ -30,6 +30,9 @@ class TranslationApp {
 
         // Output section elements
         this.outputSection = document.querySelector('.output-section');
+
+        // Streaming elements
+        this.streamingCheckbox = document.getElementById('streaming-checkbox');
         
         // Model options for each provider
         this.modelOptions = {
@@ -194,13 +197,20 @@ class TranslationApp {
         }
 
         const requestData = this.buildTranslationRequest();
+        const isStreaming = this.streamingCheckbox.checked;
+
         this.hideInfoMessage(); // Clear any previous info messages
         this.showLoading();
 
         try {
-            const result = await this.makeTranslationRequest(requestData);
-            this.displayTranslation(result.translated_text, result.dictionary_matches, result.context);
-            await this.loadTranslationHistory(); // Refresh history
+            if (isStreaming) {
+                await this.handleStreamingTranslation(requestData);
+                // History refresh is handled in finishStreamingTranslation after completion
+            } else {
+                const result = await this.makeTranslationRequest(requestData);
+                this.displayTranslation(result.translated_text, result.dictionary_matches, result.context);
+                await this.loadTranslationHistory(); // Refresh history for non-streaming
+            }
 
         } catch (error) {
             this.showError(`Translation error: ${error.message}`);
@@ -240,12 +250,14 @@ class TranslationApp {
         const token = this.apiToken.value.trim();
         const useContext = this.useContextCheckbox.checked;
         const chapterNumber = this.chapterNumber.value;
+        const streaming = this.streamingCheckbox.checked;
 
         const requestBody = {
             text: text,
             llm_provider: provider,
             api_token: token,
-            use_context: useContext
+            use_context: useContext,
+            stream: streaming
         };
 
         if (model) {
@@ -545,6 +557,95 @@ class TranslationApp {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    async handleStreamingTranslation(requestData) {
+        /**Handle streaming translation using Server-Sent Events.**/
+        this.prepareStreamingDisplay();
+
+        try {
+            const response = await fetch('/translate-stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestData)
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to start streaming translation');
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let completeTranslation = '';
+            let dictionaryMatches = [];
+            let contextInfo = null;
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // Keep incomplete line in buffer
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+
+                            if (data.type === 'chunk') {
+                                completeTranslation += data.content;
+                                this.updateStreamingText(completeTranslation);
+                            } else if (data.type === 'metadata') {
+                                dictionaryMatches = data.dictionary_matches;
+                            } else if (data.type === 'context') {
+                                contextInfo = data.context;
+                                this.addContextInfoToOutput(data.context);
+                            } else if (data.type === 'complete') {
+                                await this.finishStreamingTranslation(completeTranslation, dictionaryMatches, contextInfo);
+                                return;
+                            } else if (data.type === 'error') {
+                                throw new Error(data.message);
+                            }
+                        } catch (e) {
+                            console.error('Error parsing streaming data:', e);
+                        }
+                    }
+                }
+            }
+
+        } catch (error) {
+            console.error('Streaming error:', error);
+            throw error;
+        }
+    }
+
+    prepareStreamingDisplay() {
+        /**Prepare the output area for streaming display.**/
+        this.clearContextInfoFromOutput();
+        this.outputText.innerHTML = '';
+
+        // Add streaming container
+        const streamingContainer = document.createElement('div');
+        streamingContainer.className = 'streaming-container';
+        this.outputText.appendChild(streamingContainer);
+    }
+
+    updateStreamingText(text) {
+        /**Update the streaming text display.**/
+        const container = this.outputText.querySelector('.streaming-container');
+        if (container) {
+            container.innerHTML = text + '<span class="streaming-cursor">▊</span>';
+        }
+    }
+
+    async finishStreamingTranslation(fullText, dictionaryMatches, contextInfo) {
+        /**Finish streaming translation and apply highlighting.**/
+        this.displayTranslation(fullText, dictionaryMatches, contextInfo);
+
+        // Refresh translation history after streaming is complete
+        await this.loadTranslationHistory();
     }
 }
 
