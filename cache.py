@@ -1,6 +1,16 @@
-"""
-Memory-based caching system for MRCT BOOK Translator.
-Provides caching for translations, dictionary lookups, and context retrieval.
+"""Memory-based caching system for MRCT BOOK Translator.
+
+Provides high-performance in-memory caching for:
+- Translation results with LLM provider/model specificity
+- Dictionary lookup results with position tracking
+- Context retrieval from PDF chapters
+- Chapter content with extended TTL
+
+Features:
+- LRU eviction policy with configurable cache sizes
+- TTL support with automatic expiration cleanup
+- Comprehensive statistics tracking and reporting
+- Thread-safe operations with OrderedDict backing
 """
 
 import time

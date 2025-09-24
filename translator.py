@@ -453,8 +453,8 @@ class TranslationService:
 
     def _log_translation_request(self, text: str, llm_provider: str, use_context: bool, chapter_number: Optional[int], matches: List) -> None:
         """Log translation request details."""
-        logger.info(f"Translation request - Text: {len(text)} chars, Provider: {llm_provider}, "
-                   f"Context: {use_context}, Chapter: {chapter_number}, Dict matches: {len(matches)}")
+        logger.info(f"Translation request - {len(text)} chars, provider: {llm_provider}, "
+                   f"context: {use_context}, chapter: {chapter_number}, matches: {len(matches)}")
 
     def _log_translation_completion(self, text: str, translated: str, context_info: Optional[Dict],
                                    matches: List, chapter_number: Optional[int], use_context: bool) -> None:

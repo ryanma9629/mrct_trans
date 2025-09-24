@@ -1,3 +1,13 @@
+/**
+ * MRCT BOOK Translator - Frontend Application
+ *
+ * Provides a modern web interface for English ⇄ Chinese translation with:
+ * - Real-time streaming translation using Server-Sent Events
+ * - Technical dictionary matching with visual highlighting
+ * - Context-aware enhancement from PDF chapters
+ * - Translation history management
+ * - Multiple LLM provider support with automatic token handling
+ */
 class TranslationApp {
     constructor() {
         this.initializeElements();

@@ -1,3 +1,17 @@
+"""LLM Service - Multi-provider language model integration.
+
+Provides unified interface for multiple LLM providers:
+- OpenAI GPT models (standard and Azure)
+- Alibaba Qwen models via DashScope
+- DeepSeek models
+
+Features:
+- Async streaming support for real-time translation
+- Provider-specific configuration and error handling
+- Automatic model selection with user override capability
+- Comprehensive error handling and logging
+"""
+
 import logging
 import os
 from enum import Enum
@@ -8,6 +22,10 @@ from openai import AsyncAzureOpenAI, AsyncOpenAI
 
 # Load environment configuration
 load_dotenv()
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 
@@ -23,19 +41,44 @@ class APIError(Exception):
 
 
 class LLMService:
-    """Handles all interactions with different LLM providers."""
+    """Unified service for interacting with multiple LLM providers.
+
+    Provides a consistent interface for translation requests across different
+    language model providers with automatic configuration and error handling.
+    """
 
     def _get_llm_client(
         self, provider: SupportedProvider, api_token: str
     ) -> Union[AsyncOpenAI, AsyncAzureOpenAI]:
-        """Create and configure the appropriate API client for the provider."""
+        """Create and configure the appropriate API client for the provider.
+
+        Args:
+            provider: LLM provider enum
+            api_token: API token for authentication
+
+        Returns:
+            Configured async client for the provider
+
+        Raises:
+            APIError: If client configuration fails
+        """
         if provider == SupportedProvider.CHATGPT_AZURE:
             return self._create_azure_client(api_token)
         else:
             return self._create_openai_compatible_client(provider, api_token)
 
     def _create_azure_client(self, api_token: str) -> AsyncAzureOpenAI:
-        """Create Azure OpenAI client with configuration validation."""
+        """Create Azure OpenAI client with configuration validation.
+
+        Args:
+            api_token: Azure OpenAI API key
+
+        Returns:
+            Configured Azure OpenAI client
+
+        Raises:
+            APIError: If Azure endpoint is not configured
+        """
         azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
         if not azure_endpoint:
             raise APIError("AZURE_OPENAI_ENDPOINT not configured")
@@ -47,7 +90,18 @@ class LLMService:
         )
 
     def _create_openai_compatible_client(self, provider: SupportedProvider, api_token: str) -> AsyncOpenAI:
-        """Create OpenAI-compatible client with provider-specific base URL."""
+        """Create OpenAI-compatible client with provider-specific base URL.
+
+        Args:
+            provider: LLM provider enum
+            api_token: API token for the provider
+
+        Returns:
+            Configured OpenAI-compatible client
+
+        Raises:
+            APIError: If provider is not supported or configuration fails
+        """
         base_url = self._get_provider_base_url(provider)
         return AsyncOpenAI(api_key=api_token, base_url=base_url)
 
@@ -64,11 +118,11 @@ class LLMService:
     ) -> str:
         """Get user-selected model or fallback to provider default."""
         if model and model.strip():
-            logger.info(f"Using user-selected model: {model} for {provider.value}")
+            logger.debug(f"Using user-selected model: {model} for {provider.value}")
             return model.strip()
 
         default_model = self._get_default_model(provider)
-        logger.info(f"Using default model: {default_model} for {provider.value}")
+        logger.debug(f"Using default model: {default_model} for {provider.value}")
         return default_model
 
     def _get_default_model(self, provider: SupportedProvider) -> str:
