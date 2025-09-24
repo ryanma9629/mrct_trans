@@ -5,6 +5,7 @@ class TranslationApp {
         this.loadConfig();
         this.populateChapterDropdown();
         this.updateModelOptions(); // Initialize model options
+        this.loadTranslationHistory(); // Load history on startup
     }
 
     initializeElements() {
@@ -21,6 +22,11 @@ class TranslationApp {
         this.chapterSelection = document.getElementById('chapter-selection');
         this.chapterNumber = document.getElementById('chapter-number');
         this.infoMessage = document.getElementById('info-message');
+
+        // History elements
+        this.historyList = document.getElementById('history-list');
+        this.refreshHistoryBtn = document.getElementById('refresh-history-btn');
+        this.clearHistoryBtn = document.getElementById('clear-history-btn');
         
         // Model options for each provider
         this.modelOptions = {
@@ -62,6 +68,10 @@ class TranslationApp {
         
         // Context toggle event
         this.useContextCheckbox.addEventListener('change', () => this.toggleContextControls());
+
+        // History event handlers
+        this.refreshHistoryBtn.addEventListener('click', () => this.loadTranslationHistory());
+        this.clearHistoryBtn.addEventListener('click', () => this.clearTranslationHistory());
     }
 
     async populateChapterDropdown() {
@@ -231,6 +241,9 @@ class TranslationApp {
             const result = await response.json();
             this.displayTranslation(result.translated_text, result.dictionary_matches, result.context);
 
+            // Refresh translation history after successful translation
+            this.loadTranslationHistory();
+
         } catch (error) {
             this.showError(`Translation error: ${error.message}`);
         } finally {
@@ -377,6 +390,114 @@ class TranslationApp {
             
             document.body.removeChild(textArea);
         }
+    }
+
+    async loadTranslationHistory() {
+        try {
+            const response = await fetch('/history');
+            if (!response.ok) {
+                throw new Error('Failed to fetch translation history');
+            }
+
+            const history = await response.json();
+            this.displayHistory(history);
+
+        } catch (error) {
+            console.error('Failed to load translation history:', error);
+            this.historyList.innerHTML = '<p class="no-history">Failed to load history.</p>';
+        }
+    }
+
+    displayHistory(history) {
+        if (!history || history.length === 0) {
+            this.historyList.innerHTML = '<p class="no-history">No translation history yet.</p>';
+            return;
+        }
+
+        const historyHtml = history.map(item => {
+            const timestamp = new Date(item.timestamp).toLocaleString();
+            const direction = `${item.source_language.toUpperCase()} → ${item.target_language.toUpperCase()}`;
+
+            // Truncate long text for display
+            const originalText = item.original_text.length > 50
+                ? item.original_text.substring(0, 50) + '...'
+                : item.original_text;
+            const translatedText = item.translated_text.length > 50
+                ? item.translated_text.substring(0, 50) + '...'
+                : item.translated_text;
+
+            const contextUsed = item.use_context && item.chapter_number
+                ? `<span class="history-context-used">Ch.${item.chapter_number}</span>`
+                : '';
+
+            return `
+                <div class="history-item" data-original="${this.escapeHtml(item.original_text)}"
+                     data-translated="${this.escapeHtml(item.translated_text)}">
+                    <div class="history-item-header">
+                        <span class="history-timestamp">${timestamp}</span>
+                        <span class="history-direction">${direction}</span>
+                    </div>
+                    <div class="history-text">
+                        <div class="history-original">${this.escapeHtml(originalText)}</div>
+                        <div class="history-translated">${this.escapeHtml(translatedText)}</div>
+                    </div>
+                    <div class="history-meta">
+                        <span class="history-provider">${item.llm_provider}</span>
+                        ${contextUsed}
+                        ${item.model ? `<span>${item.model}</span>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        this.historyList.innerHTML = historyHtml;
+
+        // Add click handlers for history items
+        this.historyList.querySelectorAll('.history-item').forEach((item, index) => {
+            item.addEventListener('click', () => {
+                const historyItem = history[index];
+                const original = item.dataset.original;
+                const translated = item.dataset.translated;
+
+                // Fill the input with original text
+                this.inputText.value = original;
+
+                // Restore translation with proper highlighting using stored dictionary matches
+                this.displayTranslation(translated, historyItem.dictionary_matches, historyItem.context);
+
+                // Scroll to translation area
+                this.inputText.scrollIntoView({ behavior: 'smooth' });
+            });
+        });
+    }
+
+    async clearTranslationHistory() {
+        if (!confirm('Are you sure you want to clear the translation history?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/history', {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to clear history');
+            }
+
+            this.historyList.innerHTML = '<p class="no-history">No translation history yet.</p>';
+            this.showInfo('Translation history cleared successfully.');
+
+        } catch (error) {
+            console.error('Failed to clear history:', error);
+            this.showError('Failed to clear translation history');
+        }
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 }
 

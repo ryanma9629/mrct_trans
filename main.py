@@ -3,6 +3,8 @@ import re
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Union
 from contextlib import asynccontextmanager
+from datetime import datetime
+from collections import deque
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -87,6 +89,37 @@ class ConfigResponse(BaseModel):
     dictionary_loaded: bool
 
 
+class TranslationHistoryItem(BaseModel):
+    timestamp: datetime
+    original_text: str
+    translated_text: str
+    source_language: str  # "en" or "zh"
+    target_language: str  # "zh" or "en"
+    llm_provider: str
+    model: Optional[str] = None
+    use_context: bool = False
+    chapter_number: Optional[int] = None
+    dictionary_matches: List[Tuple[str, str, int, int]]
+    context: Optional[Dict[str, Union[str, float]]] = None
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "timestamp": "2023-12-01T12:00:00",
+                "original_text": "Hello world",
+                "translated_text": "你好世界",
+                "source_language": "en",
+                "target_language": "zh",
+                "llm_provider": "qwen",
+                "model": "qwen-turbo",
+                "use_context": False,
+                "chapter_number": None,
+                "dictionary_matches": [],
+                "context": None
+            }
+        }
+
+
 app = FastAPI(
     title="MRCT BOOK Translator",
     description="English ⇄ Chinese translation service with technical dictionary support",
@@ -121,6 +154,9 @@ def create_translation_service() -> Optional[TranslationService]:
 
 translation_service = create_translation_service()
 
+# Translation history storage (in-memory for simplicity, stores last 5 translations)
+translation_history: deque = deque(maxlen=5)
+
 
 @app.post("/translate", response_model=TranslationResponse)
 async def translate_text(request: TranslationRequest):
@@ -132,20 +168,41 @@ async def translate_text(request: TranslationRequest):
     
     try:
         translated, matches, context = await translation_service.translate(
-            request.text, 
-            request.llm_provider, 
-            request.api_token, 
+            request.text,
+            request.llm_provider,
+            request.api_token,
             request.model,
             request.use_context,
             request.chapter_number
         )
-        
+
+        # Detect source and target languages
+        is_english = translation_service.detect_language(request.text)
+        source_lang = "en" if is_english else "zh"
+        target_lang = "zh" if is_english else "en"
+
+        # Store in translation history
+        history_item = TranslationHistoryItem(
+            timestamp=datetime.now(),
+            original_text=request.text,
+            translated_text=translated,
+            source_language=source_lang,
+            target_language=target_lang,
+            llm_provider=request.llm_provider,
+            model=request.model,
+            use_context=request.use_context,
+            chapter_number=request.chapter_number,
+            dictionary_matches=matches,
+            context=context
+        )
+        translation_history.append(history_item)
+
         return TranslationResponse(
             translated_text=translated,
             dictionary_matches=matches,
             context=context
         )
-    
+
     except Exception as e:
         logger.error(f"Translation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Translation failed: {str(e)}")
@@ -188,6 +245,29 @@ async def get_config():
     except Exception as e:
         logger.error(f"Failed to get config: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get config: {str(e)}")
+
+
+@app.get("/history", response_model=List[TranslationHistoryItem])
+async def get_translation_history():
+    """Get the recent translation history (up to 5 translations)."""
+    try:
+        # Return history items in reverse chronological order (most recent first)
+        return list(reversed(translation_history))
+    except Exception as e:
+        logger.error(f"Failed to get translation history: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get history: {str(e)}")
+
+
+@app.delete("/history")
+async def clear_translation_history():
+    """Clear the translation history."""
+    try:
+        translation_history.clear()
+        logger.info("Translation history cleared")
+        return {"message": "Translation history cleared successfully"}
+    except Exception as e:
+        logger.error(f"Failed to clear translation history: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to clear history: {str(e)}")
 
 
 @app.get("/chapters")
