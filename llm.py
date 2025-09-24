@@ -12,6 +12,7 @@ Features:
 - Comprehensive error handling and logging
 """
 
+import asyncio
 import logging
 import os
 from enum import Enum
@@ -27,6 +28,11 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Timeout configuration constants
+DEFAULT_REQUEST_TIMEOUT = 30.0  # 30 seconds for regular requests
+STREAMING_REQUEST_TIMEOUT = 60.0  # 60 seconds for streaming requests
+CONNECT_TIMEOUT = 10.0  # 10 seconds to establish connection
 
 
 class SupportedProvider(Enum):
@@ -163,21 +169,54 @@ class LLMService:
             )
             return self._extract_response_content(response, provider_enum)
 
+        except APIError:
+            # Re-raise APIError as-is (already has user-friendly message)
+            raise
         except Exception as e:
-            if isinstance(e, APIError):
-                raise
-            raise APIError(f"{provider_enum.value} API error: {e}")
+            logger.error(f"Unexpected error in {provider_enum.value} API call: {e}")
+            raise APIError(f"{provider_enum.value} translation service error: {str(e)}")
 
     async def _make_api_call(self, client, model: str, system_prompt: str, text: str, temperature: float):
-        """Make the actual API call to the LLM provider."""
-        return await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Translate: {text}"},
-            ],
-            temperature=temperature,
-        )
+        """Make the actual API call to the LLM provider with timeout handling.
+
+        Args:
+            client: Configured LLM client
+            model: Model name to use
+            system_prompt: System prompt for translation
+            text: Text to translate
+            temperature: Temperature for generation
+
+        Returns:
+            API response object
+
+        Raises:
+            APIError: If request times out or fails
+        """
+        try:
+            # Add timeout wrapper around the API call
+            return await asyncio.wait_for(
+                client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"Translate: {text}"},
+                    ],
+                    temperature=temperature,
+                ),
+                timeout=DEFAULT_REQUEST_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"LLM API request timed out after {DEFAULT_REQUEST_TIMEOUT}s for model {model}")
+            raise APIError(f"Request timed out after {DEFAULT_REQUEST_TIMEOUT} seconds. Please check your network connection or try again later.")
+        except Exception as e:
+            logger.error(f"LLM API request failed: {str(e)}")
+            # Re-raise with more user-friendly message for common issues
+            if "connection" in str(e).lower() or "network" in str(e).lower():
+                raise APIError("Network connection failed. Please check your internet connection and try again.")
+            elif "unauthorized" in str(e).lower() or "403" in str(e) or "401" in str(e):
+                raise APIError("API authentication failed. Please check your API token and try again.")
+            else:
+                raise APIError(f"Translation request failed: {str(e)}")
 
     def _extract_response_content(self, response, provider_enum: SupportedProvider) -> str:
         """Extract and validate the response content."""
@@ -209,19 +248,47 @@ class LLMService:
                 if chunk.choices and chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
 
+        except APIError:
+            # Re-raise APIError as-is (already has user-friendly message)
+            raise
         except Exception as e:
-            if isinstance(e, APIError):
-                raise
-            raise APIError(f"{provider_enum.value} streaming API error: {e}")
+            logger.error(f"Unexpected error in {provider_enum.value} streaming API call: {e}")
+            raise APIError(f"{provider_enum.value} streaming translation service error: {str(e)}")
 
     async def _make_streaming_api_call(self, client, model: str, system_prompt: str, text: str, temperature: float):
-        """Make a streaming API call to the LLM provider."""
-        return await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Translate: {text}"},
-            ],
-            temperature=temperature,
-            stream=True
-        )
+        """Make a streaming API call to the LLM provider with error handling.
+
+        Args:
+            client: Configured LLM client
+            model: Model name to use
+            system_prompt: System prompt for translation
+            text: Text to translate
+            temperature: Temperature for generation
+
+        Returns:
+            Streaming API response
+
+        Raises:
+            APIError: If request setup fails
+        """
+        try:
+            # Create the streaming request (no timeout wrapper for streaming)
+            # The OpenAI client handles timeouts internally for streaming
+            return await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Translate: {text}"},
+                ],
+                temperature=temperature,
+                stream=True
+            )
+        except Exception as e:
+            logger.error(f"Streaming LLM API request failed: {str(e)}")
+            # Re-raise with more user-friendly message for common issues
+            if "connection" in str(e).lower() or "network" in str(e).lower():
+                raise APIError("Network connection failed. Please check your internet connection and try again.")
+            elif "unauthorized" in str(e).lower() or "403" in str(e) or "401" in str(e):
+                raise APIError("API authentication failed. Please check your API token and try again.")
+            else:
+                raise APIError(f"Streaming translation request failed: {str(e)}")

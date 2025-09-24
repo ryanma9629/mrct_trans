@@ -619,7 +619,10 @@ class TranslationApp {
                         try {
                             const data = JSON.parse(line.slice(6));
 
-                            if (data.type === 'chunk') {
+                            if (data.type === 'error') {
+                                // Handle streaming errors - throw to outer catch
+                                throw new Error(data.message);
+                            } else if (data.type === 'chunk') {
                                 completeTranslation += data.content;
                                 this.updateStreamingText(completeTranslation);
                             } else if (data.type === 'metadata') {
@@ -630,10 +633,17 @@ class TranslationApp {
                             } else if (data.type === 'complete') {
                                 await this.finishStreamingTranslation(completeTranslation, dictionaryMatches, contextInfo);
                                 return;
-                            } else if (data.type === 'error') {
-                                throw new Error(data.message);
                             }
                         } catch (e) {
+                            // If it's a streaming error (APIError from backend), re-throw to outer catch
+                            if (e.message.includes('timed out') ||
+                                e.message.includes('connection') ||
+                                e.message.includes('Network') ||
+                                e.message.includes('authentication') ||
+                                e.message.includes('translation')) {
+                                throw e; // Re-throw to outer catch for user display
+                            }
+                            // Otherwise it's a JSON parsing error, just log it
                             console.error('Error parsing streaming data:', e);
                         }
                     }
