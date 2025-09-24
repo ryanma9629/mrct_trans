@@ -27,6 +27,9 @@ class TranslationApp {
         this.historyList = document.getElementById('history-list');
         this.refreshHistoryBtn = document.getElementById('refresh-history-btn');
         this.clearHistoryBtn = document.getElementById('clear-history-btn');
+
+        // Output section elements
+        this.outputSection = document.querySelector('.output-section');
         
         // Model options for each provider
         this.modelOptions = {
@@ -181,68 +184,23 @@ class TranslationApp {
         }, 5000);
     }
 
-    async translate() {
-        const text = this.inputText.value.trim();
-        const provider = this.llmProvider.value;
-        const model = this.modelSelect.value;
-        const token = this.apiToken.value.trim();
-        const useContext = this.useContextCheckbox.checked;
-        const chapterNumber = this.chapterNumber.value;
-
-        if (!text) {
-            this.showError('Please enter text to translate');
-            return;
-        }
-
-        if (!token) {
-            this.showError('Please enter API token');
-            return;
-        }
-
-        if (useContext && !chapterNumber) {
-            this.showError('Please enter a chapter number when context is enabled');
-            return;
-        }
-
+    hideInfoMessage() {
         this.infoMessage.classList.add('hidden');
+    }
+
+    async translate() {
+        if (!this.validateTranslationInputs()) {
+            return;
+        }
+
+        const requestData = this.buildTranslationRequest();
+        this.hideInfoMessage(); // Clear any previous info messages
         this.showLoading();
 
         try {
-            const requestBody = {
-                text: text,
-                llm_provider: provider,
-                api_token: token,
-                use_context: useContext
-            };
-
-            // Add model if selected
-            if (model) {
-                requestBody.model = model;
-            }
-
-            // Add chapter number if context is enabled
-            if (useContext && chapterNumber) {
-                requestBody.chapter_number = parseInt(chapterNumber);
-            }
-
-            const response = await fetch('/translate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || 'Translation failed');
-            }
-
-            const result = await response.json();
+            const result = await this.makeTranslationRequest(requestData);
             this.displayTranslation(result.translated_text, result.dictionary_matches, result.context);
-
-            // Refresh translation history after successful translation
-            this.loadTranslationHistory();
+            await this.loadTranslationHistory(); // Refresh history
 
         } catch (error) {
             this.showError(`Translation error: ${error.message}`);
@@ -251,15 +209,104 @@ class TranslationApp {
         }
     }
 
+    validateTranslationInputs() {
+        const text = this.inputText.value.trim();
+        const token = this.apiToken.value.trim();
+        const useContext = this.useContextCheckbox.checked;
+        const chapterNumber = this.chapterNumber.value;
+
+        if (!text) {
+            this.showError('Please enter text to translate');
+            return false;
+        }
+
+        if (!token) {
+            this.showError('Please enter API token');
+            return false;
+        }
+
+        if (useContext && !chapterNumber) {
+            this.showError('Please enter a chapter number when context is enabled');
+            return false;
+        }
+
+        return true;
+    }
+
+    buildTranslationRequest() {
+        const text = this.inputText.value.trim();
+        const provider = this.llmProvider.value;
+        const model = this.modelSelect.value;
+        const token = this.apiToken.value.trim();
+        const useContext = this.useContextCheckbox.checked;
+        const chapterNumber = this.chapterNumber.value;
+
+        const requestBody = {
+            text: text,
+            llm_provider: provider,
+            api_token: token,
+            use_context: useContext
+        };
+
+        if (model) {
+            requestBody.model = model;
+        }
+
+        if (useContext && chapterNumber) {
+            requestBody.chapter_number = parseInt(chapterNumber);
+        }
+
+        return requestBody;
+    }
+
+    async makeTranslationRequest(requestData) {
+        const response = await fetch('/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Translation failed');
+        }
+
+        return await response.json();
+    }
+
+    addContextInfoToOutput(context) {
+        const score = (context.score * 100).toFixed(2);
+        const contextInfo = document.createElement('div');
+        contextInfo.className = 'context-info-output';
+        contextInfo.innerHTML = `
+            <div class="context-info-header">
+                📚 <strong>Context Retrieved:</strong> A relevant text block was found with a similarity score of <strong>${score}%</strong> and used to improve the translation.
+            </div>
+        `;
+
+        // Insert before the label (first child of output-section)
+        const label = this.outputSection.querySelector('label');
+        this.outputSection.insertBefore(contextInfo, label);
+    }
+
+    clearContextInfoFromOutput() {
+        // Remove any existing context info from output section
+        const existingContextInfo = this.outputSection.querySelector('.context-info-output');
+        if (existingContextInfo) {
+            existingContextInfo.remove();
+        }
+    }
+
     displayTranslation(translatedText, dictionaryMatches, context) {
-        // Clear previous content
+        // Clear previous context info
+        this.clearContextInfoFromOutput();
+
+        // Clear previous translation content
         this.outputText.innerHTML = '';
 
-        // Show context information if available
+        // Show context information above the Translation label if available
         if (context && context.text) {
-            const score = (context.score * 100).toFixed(2);
-            this.infoMessage.innerHTML = `<strong>Context Retrieved:</strong> A relevant text block was found with a similarity score of <strong>${score}%</strong> and used to improve the translation.`;
-            this.infoMessage.classList.remove('hidden');
+            this.addContextInfoToOutput(context);
         }
 
         // Create translation text container

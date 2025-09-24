@@ -400,6 +400,22 @@ input:checked + .slider:before {
     display: none;
 }
 
+/* Context information above translation label */
+.context-info-output {
+    background-color: #e8f5e8;
+    border: 1px solid #4caf50;
+    border-radius: 5px;
+    padding: 12px;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+.context-info-header {
+    color: #2e7d32;
+    margin: 0;
+    line-height: 1.4;
+}
+
 /* Translation History Styles */
 .history-section {
     border-top: 1px solid #ecf0f1;

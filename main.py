@@ -15,13 +15,16 @@ from pydantic import BaseModel
 
 from translator import TranslationService
 
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Application constants
 DICTIONARY_FILE = "QS-TB.csv"
 STATIC_DIR = "static"
 DEFAULT_HOST = "localhost"
 DEFAULT_PORT = 8099
+HISTORY_SIZE = 5
 
 
 @asynccontextmanager
@@ -143,6 +146,7 @@ app.add_middleware(
 )
 
 def create_translation_service() -> Optional[TranslationService]:
+    """Initialize the translation service with error handling."""
     try:
         service = TranslationService(DICTIONARY_FILE)
         logger.info("Translation service initialized successfully")
@@ -152,21 +156,81 @@ def create_translation_service() -> Optional[TranslationService]:
         return None
 
 
+# Global translation service instance
 translation_service = create_translation_service()
 
-# Translation history storage (in-memory for simplicity, stores last 5 translations)
-translation_history: deque = deque(maxlen=5)
+# Translation history storage (in-memory, stores last N translations)
+translation_history: deque = deque(maxlen=HISTORY_SIZE)
+
+
+def _store_translation_history(
+    request: TranslationRequest,
+    translated: str,
+    matches: List[Tuple[str, str, int, int]],
+    context: Optional[Dict[str, Union[str, float]]]
+) -> None:
+    """Store translation in history with language detection."""
+    is_english = translation_service.detect_language(request.text)
+    source_lang = "en" if is_english else "zh"
+    target_lang = "zh" if is_english else "en"
+
+    history_item = TranslationHistoryItem(
+        timestamp=datetime.now(),
+        original_text=request.text,
+        translated_text=translated,
+        source_language=source_lang,
+        target_language=target_lang,
+        llm_provider=request.llm_provider,
+        model=request.model,
+        use_context=request.use_context,
+        chapter_number=request.chapter_number,
+        dictionary_matches=matches,
+        context=context
+    )
+    translation_history.append(history_item)
+
+
+def _validate_translation_service() -> None:
+    """Validate that translation service is available."""
+    if translation_service is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Translation service is not available"
+        )
+
+
+def _build_config_response(basic_config: Dict) -> ConfigResponse:
+    """Build configuration response with safe type casting."""
+    # Extract and validate configuration data
+    supported_providers = basic_config.get("supported_providers", [])
+    default_models = basic_config.get("default_models", {})
+    default_tokens = basic_config.get("default_tokens", {})
+
+    # Ensure correct types
+    if not isinstance(supported_providers, list):
+        supported_providers = []
+    if not isinstance(default_models, dict):
+        default_models = {}
+    if not isinstance(default_tokens, dict):
+        default_tokens = {}
+
+    return ConfigResponse(
+        supported_providers=supported_providers,
+        default_models=default_models,
+        default_tokens=default_tokens,
+        default_provider=supported_providers[0] if supported_providers else "chatgpt",
+        dictionary_file=DICTIONARY_FILE,
+        dictionary_loaded=Path(DICTIONARY_FILE).exists()
+    )
 
 
 @app.post("/translate", response_model=TranslationResponse)
 async def translate_text(request: TranslationRequest):
-    if translation_service is None:
-        raise HTTPException(
-            status_code=503, 
-            detail="Translation service is not available"
-        )
+    """Translate text and store in history."""
+    _validate_translation_service()
     
     try:
+        # Perform translation
         translated, matches, context = await translation_service.translate(
             request.text,
             request.llm_provider,
@@ -176,26 +240,8 @@ async def translate_text(request: TranslationRequest):
             request.chapter_number
         )
 
-        # Detect source and target languages
-        is_english = translation_service.detect_language(request.text)
-        source_lang = "en" if is_english else "zh"
-        target_lang = "zh" if is_english else "en"
-
-        # Store in translation history
-        history_item = TranslationHistoryItem(
-            timestamp=datetime.now(),
-            original_text=request.text,
-            translated_text=translated,
-            source_language=source_lang,
-            target_language=target_lang,
-            llm_provider=request.llm_provider,
-            model=request.model,
-            use_context=request.use_context,
-            chapter_number=request.chapter_number,
-            dictionary_matches=matches,
-            context=context
-        )
-        translation_history.append(history_item)
+        # Store in history and return response
+        _store_translation_history(request, translated, matches, context)
 
         return TranslationResponse(
             translated_text=translated,
@@ -210,38 +256,16 @@ async def translate_text(request: TranslationRequest):
 
 @app.get("/config", response_model=ConfigResponse)
 async def get_config():
-    if translation_service is None:
-        raise HTTPException(
-            status_code=503, 
-            detail="Translation service is not available"
-        )
+    """Get application configuration."""
+    _validate_translation_service()
     
     try:
         # Get the basic config from the translation service
         basic_config = translation_service.get_config()
         
-        # Extract the configuration data with proper type casting
-        supported_providers = basic_config.get("supported_providers", [])
-        default_models = basic_config.get("default_models", {})
-        default_tokens = basic_config.get("default_tokens", {})
-        
-        # Ensure we have the right types
-        if not isinstance(supported_providers, list):
-            supported_providers = []
-        if not isinstance(default_models, dict):
-            default_models = {}
-        if not isinstance(default_tokens, dict):
-            default_tokens = {}
-        
-        # Add the missing fields required by ConfigResponse
-        return ConfigResponse(
-            supported_providers=supported_providers,
-            default_models=default_models,
-            default_tokens=default_tokens,
-            default_provider=supported_providers[0] if supported_providers else "chatgpt",
-            dictionary_file=DICTIONARY_FILE,
-            dictionary_loaded=Path(DICTIONARY_FILE).exists()
-        )
+        # Get configuration with safe type casting
+        config = _build_config_response(basic_config)
+        return config
     except Exception as e:
         logger.error(f"Failed to get config: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get config: {str(e)}")
@@ -305,14 +329,13 @@ async def serve_index():
 
 @app.get("/health")
 async def health_check():
-    status = {
+    """Check application health status."""
+    return {
         "status": "healthy" if translation_service is not None else "degraded",
         "translation_service": translation_service is not None,
         "dictionary_file": Path(DICTIONARY_FILE).exists(),
         "static_files": Path(STATIC_DIR).exists()
     }
-    
-    return status
 
 
 if Path(STATIC_DIR).exists():

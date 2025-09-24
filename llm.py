@@ -6,6 +6,7 @@ from typing import Optional, Union
 from dotenv import load_dotenv
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 
+# Load environment configuration
 load_dotenv()
 logger = logging.getLogger(__name__)
 
@@ -27,64 +28,66 @@ class LLMService:
     def _get_llm_client(
         self, provider: SupportedProvider, api_token: str
     ) -> Union[AsyncOpenAI, AsyncAzureOpenAI]:
-        """Creates and configures the appropriate API client based on the provider."""
+        """Create and configure the appropriate API client for the provider."""
         if provider == SupportedProvider.CHATGPT_AZURE:
-            azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-            if not azure_endpoint:
-                raise APIError("AZURE_OPENAI_ENDPOINT not configured")
-            return AsyncAzureOpenAI(
-                api_key=api_token,
-                azure_endpoint=azure_endpoint,
-                api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2025-03-01-preview"),
-            )
+            return self._create_azure_client(api_token)
+        else:
+            return self._create_openai_compatible_client(provider, api_token)
 
-        # For all other OpenAI-compatible APIs
-        base_url = None
-        if provider == SupportedProvider.DEEPSEEK:
-            base_url = os.getenv("DEEPSEEK_ENDPOINT", "https://api.deepseek.com/")
-        elif provider == SupportedProvider.QWEN:
-            base_url = os.getenv(
-                "QWEN_ENDPOINT", "https://dashscope.aliyuncs.com/compatible-mode/v1"
-            )
+    def _create_azure_client(self, api_token: str) -> AsyncAzureOpenAI:
+        """Create Azure OpenAI client with configuration validation."""
+        azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+        if not azure_endpoint:
+            raise APIError("AZURE_OPENAI_ENDPOINT not configured")
 
+        return AsyncAzureOpenAI(
+            api_key=api_token,
+            azure_endpoint=azure_endpoint,
+            api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2025-03-01-preview"),
+        )
+
+    def _create_openai_compatible_client(self, provider: SupportedProvider, api_token: str) -> AsyncOpenAI:
+        """Create OpenAI-compatible client with provider-specific base URL."""
+        base_url = self._get_provider_base_url(provider)
         return AsyncOpenAI(api_key=api_token, base_url=base_url)
+
+    def _get_provider_base_url(self, provider: SupportedProvider) -> Optional[str]:
+        """Get the base URL for the given provider."""
+        url_mapping = {
+            SupportedProvider.DEEPSEEK: os.getenv("DEEPSEEK_ENDPOINT", "https://api.deepseek.com/"),
+            SupportedProvider.QWEN: os.getenv("QWEN_ENDPOINT", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+        }
+        return url_mapping.get(provider)
 
     def _get_model_for_provider(
         self, provider: SupportedProvider, model: Optional[str]
     ) -> str:
-        """Gets the user-selected model or falls back to hardcoded defaults."""
+        """Get user-selected model or fallback to provider default."""
         if model and model.strip():
-            logger.info(
-                f"Using user-selected model: {model} for provider: {provider.value}"
-            )
+            logger.info(f"Using user-selected model: {model} for {provider.value}")
             return model.strip()
 
-        logger.info(
-            f"No model specified (received: '{model}'), using default for provider: {provider.value}"
-        )
+        default_model = self._get_default_model(provider)
+        logger.info(f"Using default model: {default_model} for {provider.value}")
+        return default_model
 
-        # Hardcoded default models - no environment variable lookup
-        default_model_map = {
+    def _get_default_model(self, provider: SupportedProvider) -> str:
+        """Get the default model for a provider."""
+        default_models = {
             SupportedProvider.CHATGPT: "gpt-4o-mini",
             SupportedProvider.CHATGPT_AZURE: "gpt-4o-mini",
             SupportedProvider.DEEPSEEK: "deepseek-chat",
             SupportedProvider.QWEN: "qwen-turbo",
         }
-
-        selected_default = default_model_map.get(provider, "gpt-4o-mini")
-        logger.info(
-            f"Using default model: {selected_default} for provider: {provider.value}"
-        )
-        return selected_default
+        return default_models.get(provider, "gpt-4o-mini")
 
     def _validate_provider(self, provider: str) -> SupportedProvider:
+        """Validate and convert provider string to enum."""
         try:
             return SupportedProvider(provider)
         except ValueError:
-            supported_providers = [p.value for p in SupportedProvider]
-            raise ValueError(
-                f"Unsupported LLM provider: {provider}. Supported providers: {supported_providers}"
-            )
+            supported = [p.value for p in SupportedProvider]
+            raise ValueError(f"Unsupported provider: {provider}. Supported: {supported}")
 
     async def call_llm_api(
         self,
@@ -95,29 +98,36 @@ class LLMService:
         model: Optional[str] = None,
         temperature: float = 0.1,
     ) -> str:
-        """
-        Calls the specified LLM provider with the given text and system prompt.
-        """
+        """Call the specified LLM provider API for translation."""
         provider_enum = self._validate_provider(provider)
         client = self._get_llm_client(provider_enum, api_token)
         selected_model = self._get_model_for_provider(provider_enum, model)
 
         try:
-            response = await client.chat.completions.create(
-                model=selected_model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Translate: {text}"},
-                ],
-                temperature=temperature,
+            response = await self._make_api_call(
+                client, selected_model, system_prompt, text, temperature
             )
-
-            if not response.choices or not response.choices[0].message.content:
-                raise APIError(f"Empty response from {provider_enum.value} API")
-
-            return response.choices[0].message.content.strip()
+            return self._extract_response_content(response, provider_enum)
 
         except Exception as e:
             if isinstance(e, APIError):
                 raise
             raise APIError(f"{provider_enum.value} API error: {e}")
+
+    async def _make_api_call(self, client, model: str, system_prompt: str, text: str, temperature: float):
+        """Make the actual API call to the LLM provider."""
+        return await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Translate: {text}"},
+            ],
+            temperature=temperature,
+        )
+
+    def _extract_response_content(self, response, provider_enum: SupportedProvider) -> str:
+        """Extract and validate the response content."""
+        if not response.choices or not response.choices[0].message.content:
+            raise APIError(f"Empty response from {provider_enum.value} API")
+
+        return response.choices[0].message.content.strip()
