@@ -25,7 +25,6 @@ class TranslationApp {
 
         // History elements
         this.historyList = document.getElementById('history-list');
-        this.refreshHistoryBtn = document.getElementById('refresh-history-btn');
         this.clearHistoryBtn = document.getElementById('clear-history-btn');
 
         // Output section elements
@@ -74,7 +73,6 @@ class TranslationApp {
         this.useContextCheckbox.addEventListener('change', () => this.toggleContextControls());
 
         // History event handlers
-        this.refreshHistoryBtn.addEventListener('click', () => this.loadTranslationHistory());
         this.clearHistoryBtn.addEventListener('click', () => this.clearTranslationHistory());
     }
 
@@ -201,6 +199,14 @@ class TranslationApp {
         setTimeout(() => {
             this.errorMessage.classList.add('hidden');
         }, 5000);
+    }
+
+    showInfo(message) {
+        this.infoMessage.textContent = message;
+        this.infoMessage.classList.remove('hidden');
+        setTimeout(() => {
+            this.infoMessage.classList.add('hidden');
+        }, 3000);
     }
 
     hideInfoMessage() {
