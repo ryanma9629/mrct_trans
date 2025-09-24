@@ -251,12 +251,31 @@ input:checked + .slider:before {
     padding: 20px;
     border-radius: 10px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    flex: 1;
+}
+
+.input-section {
+    flex: 0 0 auto; /* Don't grow, just fit content */
+    display: flex;
+    flex-direction: column;
+    gap: 10px; /* Consistent spacing between elements */
+}
+
+.output-section {
+    flex: 1; /* Take remaining space */
+    display: flex;
+    flex-direction: column;
+    gap: 10px; /* Consistent spacing between elements */
+}
+
+/* Remove margin for copy button since output-section uses gap */
+.output-section .btn {
+    margin-top: 0;
+    align-self: flex-start; /* Don't stretch to full width */
 }
 
 .input-section label, .output-section label {
     display: block;
-    margin-bottom: 10px;
+    margin-bottom: 0; /* Remove margin since sections now use gap */
     font-weight: 600;
     color: #2c3e50;
 }
@@ -288,6 +307,7 @@ input:checked + .slider:before {
     line-height: 1.6;
     white-space: pre-wrap;
     word-wrap: break-word;
+    flex: 1; /* Take remaining space in output-section */
 }
 
 .dictionary-match {
@@ -308,6 +328,12 @@ input:checked + .slider:before {
     cursor: pointer;
     transition: background-color 0.3s ease;
     margin-top: 10px;
+}
+
+/* Remove margin for translate button since input-section uses gap */
+.input-section .btn {
+    margin-top: 0;
+    align-self: flex-start; /* Don't stretch to full width */
 }
 
 .btn-primary {
