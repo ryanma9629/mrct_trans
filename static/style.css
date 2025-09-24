@@ -400,8 +400,8 @@ input:checked + .slider:before {
     display: none;
 }
 
-/* Streaming and context controls */
-.context-controls, .streaming-controls {
+/* Context controls */
+.context-controls {
     margin-bottom: 15px;
 }
 

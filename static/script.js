@@ -31,8 +31,6 @@ class TranslationApp {
         // Output section elements
         this.outputSection = document.querySelector('.output-section');
 
-        // Streaming elements
-        this.streamingCheckbox = document.getElementById('streaming-checkbox');
         
         // Model options for each provider
         this.modelOptions = {
@@ -66,10 +64,10 @@ class TranslationApp {
             }
         });
 
-        // Auto-fill API token when provider changes
+        // Update model options and API token when provider changes
         this.llmProvider.addEventListener('change', () => {
-            this.updateApiToken();
             this.updateModelOptions();
+            this.updateApiToken();
         });
         
         // Context toggle event
@@ -119,18 +117,36 @@ class TranslationApp {
         try {
             const response = await fetch('/config');
             const config = await response.json();
-            this.defaultTokens = config.default_tokens;
-            this.updateApiToken();
+            this.tokensAvailable = config.tokens_available;
+            await this.updateApiToken();
+            console.log('Configuration loaded successfully');
         } catch (error) {
             console.error('Failed to load config:', error);
-            this.defaultTokens = {};
+            this.tokensAvailable = {};
         }
     }
 
-    updateApiToken() {
+    async updateApiToken() {
         const provider = this.llmProvider.value;
-        if (this.defaultTokens && this.defaultTokens[provider]) {
-            this.apiToken.value = this.defaultTokens[provider];
+
+        // Check if token is available for this provider
+        if (this.tokensAvailable && this.tokensAvailable[provider]) {
+            try {
+                const response = await fetch(`/token/${provider}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.apiToken.value = data.token;
+                } else {
+                    // Token not available, clear the field
+                    this.apiToken.value = '';
+                }
+            } catch (error) {
+                console.error('Failed to fetch API token:', error);
+                this.apiToken.value = '';
+            }
+        } else {
+            // Token not available, clear the field
+            this.apiToken.value = '';
         }
     }
 
@@ -197,20 +213,14 @@ class TranslationApp {
         }
 
         const requestData = this.buildTranslationRequest();
-        const isStreaming = this.streamingCheckbox.checked;
 
         this.hideInfoMessage(); // Clear any previous info messages
         this.showLoading();
 
         try {
-            if (isStreaming) {
-                await this.handleStreamingTranslation(requestData);
-                // History refresh is handled in finishStreamingTranslation after completion
-            } else {
-                const result = await this.makeTranslationRequest(requestData);
-                this.displayTranslation(result.translated_text, result.dictionary_matches, result.context);
-                await this.loadTranslationHistory(); // Refresh history for non-streaming
-            }
+            // Always use streaming translation
+            await this.handleStreamingTranslation(requestData);
+            // History refresh is handled in finishStreamingTranslation after completion
 
         } catch (error) {
             this.showError(`Translation error: ${error.message}`);
@@ -250,14 +260,13 @@ class TranslationApp {
         const token = this.apiToken.value.trim();
         const useContext = this.useContextCheckbox.checked;
         const chapterNumber = this.chapterNumber.value;
-        const streaming = this.streamingCheckbox.checked;
 
         const requestBody = {
             text: text,
             llm_provider: provider,
             api_token: token,
             use_context: useContext,
-            stream: streaming
+            stream: true  // Always enable streaming
         };
 
         if (model) {

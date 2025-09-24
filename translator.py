@@ -2,12 +2,14 @@ import os
 import csv
 import re
 import logging
+import hashlib
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Union
 from dotenv import load_dotenv
 from difflib import SequenceMatcher
 
 from llm import LLMService, APIError, SupportedProvider
+from cache import cache_manager
 
 load_dotenv()
 
@@ -31,6 +33,7 @@ class DictionaryMatcher:
     def __init__(self, csv_file: Union[str, Path]):
         self.en_to_cn: Dict[str, str] = {}
         self.cn_to_en: Dict[str, str] = {}
+        self.csv_file = csv_file
         self._load_dictionary(csv_file)
     
     def _load_dictionary(self, csv_file: Union[str, Path]) -> None:
@@ -67,12 +70,24 @@ class DictionaryMatcher:
         if not text.strip():
             return []
 
+        # Check cache first
+        cached_matches = cache_manager.get_dictionary_matches(text, is_english)
+        if cached_matches is not None:
+            logger.debug(f"Dictionary cache hit for text length {len(text)}")
+            return cached_matches
+
         dictionary = self.en_to_cn if is_english else self.cn_to_en
         if not dictionary:
             logger.warning("Dictionary is empty")
             return []
 
-        return self._find_text_matches(text, dictionary, is_english)
+        matches = self._find_text_matches(text, dictionary, is_english)
+
+        # Cache the results
+        cache_manager.cache_dictionary_matches(text, is_english, matches)
+        logger.debug(f"Dictionary matches cached for text length {len(text)}")
+
+        return matches
 
     def _find_text_matches(self, text: str, dictionary: Dict[str, str], is_english: bool) -> List[Tuple[str, str, int, int]]:
         """Internal method to find and return text matches."""
@@ -146,6 +161,12 @@ class TranslationService:
     def _retrieve_text_context(self, text: str, chapter_number: int,
                                similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD) -> Optional[Tuple[str, float]]:
         """Retrieve relevant context from chapter text using similarity matching."""
+        # Check cache first
+        cached_result = cache_manager.get_context(text, chapter_number, similarity_threshold)
+        if cached_result is not None:
+            logger.debug(f"Context cache hit for Chapter {chapter_number}")
+            return cached_result
+
         if not self._validate_context_retrieval(chapter_number):
             return None
 
@@ -157,13 +178,19 @@ class TranslationService:
 
         similarity, context = self._find_best_context_match(text, chapter_text)
 
+        result = None
         if similarity >= similarity_threshold:
             logger.info(f"Using context with similarity {similarity:.4f} (threshold: {similarity_threshold})")
             self._log_context_details(context, chapter_number)
-            return context, similarity
+            result = (context, similarity)
         else:
             logger.warning(f"Match similarity {similarity:.4f} below threshold {similarity_threshold}")
-            return None
+
+        # Cache the result (even if None, to avoid repeated processing)
+        cache_manager.cache_context(text, chapter_number, similarity_threshold, result)
+        logger.debug(f"Context result cached for Chapter {chapter_number}")
+
+        return result
 
     def _validate_context_retrieval(self, chapter_number: int) -> bool:
         """Validate that context retrieval is possible."""
@@ -181,13 +208,25 @@ class TranslationService:
         return True
 
     def _load_chapter_text(self, chapter_number: int) -> Optional[str]:
-        """Load chapter text from file."""
+        """Load chapter text from file with caching."""
+        # Check cache first
+        cached_content = cache_manager.get_chapter_content(chapter_number)
+        if cached_content is not None:
+            logger.debug(f"Chapter {chapter_number} content retrieved from cache")
+            return cached_content
+
         chapter_file = f"Chapter{chapter_number}.txt"
         file_path = os.path.join(self.context_data_path, chapter_file)
 
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
-                return f.read()
+                content = f.read()
+
+            # Cache the content
+            cache_manager.cache_chapter_content(chapter_number, content)
+            logger.debug(f"Chapter {chapter_number} content loaded and cached")
+            return content
+
         except IOError as e:
             logger.error(f"Could not read context file {file_path}: {e}")
             return None
@@ -312,6 +351,10 @@ class TranslationService:
             f"--- CONTEXT END ---\n\n"
             f"Remember: Only translate the user's submitted text, not the context above."
         )
+
+    def _generate_system_prompt_hash(self, system_prompt: str) -> str:
+        """Generate a hash for the system prompt to use in caching."""
+        return hashlib.md5(system_prompt.encode()).hexdigest()
     
     async def translate(self, text: str, llm_provider: str, api_token: str,
                        model: Optional[str] = None, use_context: bool = False,
@@ -375,10 +418,21 @@ class TranslationService:
 
     async def _perform_translation(self, text: str, is_english: bool, matches: List, context_info: Optional[Dict],
                                   llm_provider: str, api_token: str, model: Optional[str]) -> str:
-        """Perform the actual LLM translation call."""
+        """Perform the actual LLM translation call with caching."""
         context_text = context_info['text'] if context_info else None
         system_prompt = self._prepare_system_prompt(is_english, matches, context_text)
 
+        # Generate cache key components
+        system_prompt_hash = self._generate_system_prompt_hash(system_prompt)
+        model_name = model or "default"
+
+        # Check cache first
+        cached_translation = cache_manager.get_translation(text, llm_provider, model_name, system_prompt_hash)
+        if cached_translation is not None:
+            logger.debug(f"Translation cache hit for provider {llm_provider}")
+            return cached_translation
+
+        # Perform actual translation
         translated = await self.llm_service.call_llm_api(
             text=text,
             system_prompt=system_prompt,
@@ -390,6 +444,10 @@ class TranslationService:
 
         if not translated.strip():
             raise TranslationError("Translation result is empty")
+
+        # Cache the translation
+        cache_manager.cache_translation(text, llm_provider, model_name, system_prompt_hash, translated)
+        logger.debug(f"Translation cached for provider {llm_provider}")
 
         return translated
 
@@ -422,11 +480,11 @@ class TranslationService:
                 SupportedProvider.DEEPSEEK.value: "deepseek-chat",
                 SupportedProvider.QWEN.value: "qwen-turbo"
             },
-            "default_tokens": {
-                SupportedProvider.CHATGPT.value: os.getenv("OPENAI_API_KEY", ""),
-                SupportedProvider.CHATGPT_AZURE.value: os.getenv("AZURE_OPENAI_API_KEY", ""),
-                SupportedProvider.DEEPSEEK.value: os.getenv("DEEPSEEK_API_KEY", ""),
-                SupportedProvider.QWEN.value: os.getenv("DASHSCOPE_API_KEY", "")
+            "tokens_available": {
+                SupportedProvider.CHATGPT.value: bool(os.getenv("OPENAI_API_KEY", "").strip()),
+                SupportedProvider.CHATGPT_AZURE.value: bool(os.getenv("AZURE_OPENAI_API_KEY", "").strip()),
+                SupportedProvider.DEEPSEEK.value: bool(os.getenv("DEEPSEEK_API_KEY", "").strip()),
+                SupportedProvider.QWEN.value: bool(os.getenv("DASHSCOPE_API_KEY", "").strip())
             }
         }
 

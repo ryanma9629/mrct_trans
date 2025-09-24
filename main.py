@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Union
@@ -15,6 +16,7 @@ from pydantic import BaseModel
 import json
 
 from translator import TranslationService
+from cache import cache_manager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -89,7 +91,7 @@ class TranslationResponse(BaseModel):
 class ConfigResponse(BaseModel):
     supported_providers: List[str]
     default_models: Dict[str, str]
-    default_tokens: Dict[str, str]
+    tokens_available: Dict[str, bool]
     default_provider: str
     dictionary_file: str
     dictionary_loaded: bool
@@ -207,20 +209,20 @@ def _build_config_response(basic_config: Dict) -> ConfigResponse:
     # Extract and validate configuration data
     supported_providers = basic_config.get("supported_providers", [])
     default_models = basic_config.get("default_models", {})
-    default_tokens = basic_config.get("default_tokens", {})
+    tokens_available = basic_config.get("tokens_available", {})
 
     # Ensure correct types
     if not isinstance(supported_providers, list):
         supported_providers = []
     if not isinstance(default_models, dict):
         default_models = {}
-    if not isinstance(default_tokens, dict):
-        default_tokens = {}
+    if not isinstance(tokens_available, dict):
+        tokens_available = {}
 
     return ConfigResponse(
         supported_providers=supported_providers,
         default_models=default_models,
-        default_tokens=default_tokens,
+        tokens_available=tokens_available,
         default_provider=supported_providers[0] if supported_providers else "chatgpt",
         dictionary_file=DICTIONARY_FILE,
         dictionary_loaded=Path(DICTIONARY_FILE).exists()
@@ -346,17 +348,40 @@ async def translate_text_stream(request: TranslationRequest):
 async def get_config():
     """Get application configuration."""
     _validate_translation_service()
-    
+
     try:
         # Get the basic config from the translation service
         basic_config = translation_service.get_config()
-        
+
         # Get configuration with safe type casting
         config = _build_config_response(basic_config)
         return config
     except Exception as e:
         logger.error(f"Failed to get config: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get config: {str(e)}")
+
+
+@app.get("/token/{provider}")
+async def get_api_token(provider: str):
+    """Get API token for a specific provider if available in environment."""
+    # Map provider to environment variable
+    token_map = {
+        "chatgpt": "OPENAI_API_KEY",
+        "chatgpt(azure)": "AZURE_OPENAI_API_KEY",
+        "deepseek": "DEEPSEEK_API_KEY",
+        "qwen": "DASHSCOPE_API_KEY"
+    }
+
+    if provider not in token_map:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    env_var = token_map[provider]
+    token = os.getenv(env_var, "").strip()
+
+    if not token:
+        raise HTTPException(status_code=404, detail="Token not available")
+
+    return {"token": token}
 
 
 @app.get("/history", response_model=List[TranslationHistoryItem])
@@ -424,6 +449,47 @@ async def health_check():
         "dictionary_file": Path(DICTIONARY_FILE).exists(),
         "static_files": Path(STATIC_DIR).exists()
     }
+
+
+@app.get("/cache/stats")
+async def get_cache_stats():
+    """Get cache statistics and performance metrics."""
+    try:
+        stats = cache_manager.get_all_stats()
+        return {
+            "caches": stats,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get cache stats: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get cache stats: {str(e)}")
+
+
+@app.post("/cache/clear")
+async def clear_cache():
+    """Clear all caches."""
+    try:
+        cache_manager.clear_all()
+        logger.info("All caches cleared via API")
+        return {"message": "All caches cleared successfully"}
+    except Exception as e:
+        logger.error(f"Failed to clear caches: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to clear caches: {str(e)}")
+
+
+@app.post("/cache/cleanup")
+async def cleanup_cache():
+    """Clean up expired cache entries."""
+    try:
+        cleaned = cache_manager.cleanup_all()
+        logger.info(f"Cache cleanup completed: {cleaned}")
+        return {
+            "message": "Cache cleanup completed",
+            "cleaned_entries": cleaned
+        }
+    except Exception as e:
+        logger.error(f"Failed to cleanup caches: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup caches: {str(e)}")
 
 
 if Path(STATIC_DIR).exists():
